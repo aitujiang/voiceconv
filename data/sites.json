@@ -1,0 +1,58 @@
+{
+  "视频素材": [
+    [
+      "B站",
+      "https://www.bilibili.com"
+    ],
+    [
+      "YouTube",
+      "https://www.youtube.com"
+    ],
+    [
+      "抖音",
+      "https://www.douyin.com"
+    ],
+    [
+      "小红书",
+      "https://www.xiaohongshu.com"
+    ]
+  ],
+  "音效素材": [
+    [
+      "爱给网",
+      "https://www.aigei.com"
+    ],
+    [
+      "Freesound",
+      "https://freesound.org"
+    ],
+    [
+      "淘声网",
+      "https://www.ear0.com"
+    ]
+  ],
+  "字体素材": [
+    [
+      "字体天下",
+      "https://www.fonts.net.cn"
+    ],
+    [
+      "100font",
+      "https://www.100font.com"
+    ]
+  ],
+  "配音 / 语音": [
+    [
+      "GPT-SoVITS",
+      "https://github.com/RVC-Boss/GPT-SoVITS"
+    ],
+    [
+      "Seed-VC",
+      "https://github.com/Plachtaa/Seed-VC"
+    ],
+    [
+      "ModelScope（模型下载）",
+      "https://www.modelscope.cn"
+    ]
+  ]
+}

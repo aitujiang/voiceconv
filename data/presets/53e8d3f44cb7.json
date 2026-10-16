@@ -1,0 +1,14 @@
+{
+  "id": "53e8d3f44cb7",
+  "name": "梦前辈",
+  "voice_type": "realtime",
+  "ref_audio": "D:/dshworking01/voiceconv/data/voices/733a17e3322b43c3bb79478422e84077.mp3",
+  "mode": "v1",
+  "similarity": 0.7,
+  "steps": 30,
+  "model_path": "",
+  "model_kind": "",
+  "note": "",
+  "created": 1791190204.9295073,
+  "last_used": 0.0
+}
