@@ -88,6 +88,11 @@ data/voices/
 !data/presets/
 !data/presets/*.json
 !data/sites.json
+!data/links.example.json
+
+# 外部软件列表：里面是用户自己电脑上的路径，不该进版本库。
+# 想了解格式看 data/links.example.json。
+data/links.json
 
 # --------------------------------------------------------------------------- #
 # 日志和临时文件

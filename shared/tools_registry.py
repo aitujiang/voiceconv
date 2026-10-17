@@ -27,10 +27,13 @@ class Tool:
     ready: bool = False           # 开发完了吗（没完就是灰显占位）
     notes: str = ""               # 灰显时显示的原因
     requires: list[Path] = field(default_factory=list)   # 缺了就不能跑
-    # 外部程序：不是我们写的工具，而是用户电脑上已有的软件（ComfyUI 之类）。
-    # 有值时点卡片不去跑 Python，而是直接把这个文件交给系统打开
-    # （等同双击），并且用它所在目录当工作目录 —— 很多启动器依赖相对路径。
+    # 外部程序：不是我们写的工具，而是用户自己添加的软件。
+    # 有值时点卡片不去跑 Python，而是直接把这个文件交给系统打开。
+    # 这个字段现在由 shared/links.py 的动态条目填充（见 external_tools()），
+    # 不再在 TOOLS 里硬编码任何路径 —— 别人的电脑上没有你的 ComfyUI。
     external: Path | None = None
+    # 外部链接的 id（用于编辑/删除）。内置工具没有这个。
+    link_id: str = ""
 
     @property
     def is_external(self) -> bool:
@@ -55,7 +58,7 @@ class Tool:
             return "环境缺失", RED
         if self.is_external:
             # 外部软件：文件在就是可用，不检查 Python 模块
-            return ("可用", GREEN) if self.external.exists() else ("未安装", GREY)
+            return ("可用", GREEN) if self.external.exists() else ("找不到", GREY)
         if not self.entry_file().exists():
             return "模块缺失", RED
         return "可用", GREEN
@@ -200,14 +203,11 @@ TOOLS: list[Tool] = [
         ],
     ),
 
-    # ---------------- 外部软件（用户电脑上已有的程序） ----------------
-    # 这些不是我们写的，点了只是把它自己的启动器打开（等同双击）。
-    # 想加新的：复制一条，把 external 换成那个 .exe / .bat 的路径。
-    Tool(key="comfyui", title="ComfyUI", subtitle="AI 绘图 · 绘世启动器",
-         icon="🎨", group="外部软件",
-         external=Path(r"D:\confluui\ComfyUI-aki-v3.2\绘世启动器.exe"),
-         ready=True,
-         notes="你电脑上已有的 ComfyUI，点了打开它的启动器"),
+    # ---------------- 外部软件 ----------------
+    # 这里**不硬编码任何东西** —— 用户的软件列表存在 data\links.json 里，
+    # 由 external_tools() 在运行时读出来。空列表就显示"还没有添加软件"。
+    # 以前这里写过一条 ComfyUI 的绝对路径，别人 clone 下来就是一个
+    # "找不到文件"的坏卡片，所以去掉了。
 
     # ---------------- 后续规划（占位） ----------------
     Tool(key="edit", title="视频剪辑", subtitle="裁剪 / 拼接", icon="✂",
@@ -223,6 +223,36 @@ TOOLS: list[Tool] = [
 ]
 
 GROUPS = ["素材获取", "声音处理", "外部软件", "后续规划"]
+
+
+def external_tools() -> list[Tool]:
+    """把用户添加的外部软件转成 Tool，供启动器渲染。
+
+    每次刷新界面时重新读 data\\links.json —— 这样添加/删除后
+    不用重启工具箱。
+    """
+    from shared import links as link_store          # 延迟导入，避免循环依赖
+
+    out: list[Tool] = []
+    for item in link_store.load_all():
+        problem = item.problem()
+        out.append(Tool(
+            key=f"ext:{item.id}",
+            title=item.name,
+            subtitle=item.summary(),
+            icon=item.icon(),
+            group="外部软件",
+            external=item.path,
+            link_id=item.id,
+            ready=True,
+            notes=problem,                # 有值时卡片会显示成不可用
+        ))
+    return out
+
+
+def all_tools() -> list[Tool]:
+    """内置工具 + 用户添加的外部软件。界面应该用这个而不是 TOOLS。"""
+    return TOOLS + external_tools()
 
 
 def by_key(key: str) -> Tool | None:

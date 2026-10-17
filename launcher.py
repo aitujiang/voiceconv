@@ -18,14 +18,15 @@ import subprocess
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from shared import paths, theme                                  # noqa: E402
 from shared import opener                                        # noqa: E402
 from shared import vram                                          # noqa: E402
-from shared.tools_registry import GROUPS, TOOLS, Tool, module_available  # noqa: E402
+from shared.tools_registry import (GROUPS, TOOLS, Tool, all_tools,  # noqa: E402
+                                   module_available)
 
 
 class ToolCard(tk.Frame):
@@ -36,9 +37,10 @@ class ToolCard(tk.Frame):
     环境缺失 -> 点击列出缺什么
     """
 
-    def __init__(self, parent, tool: Tool, on_click):
+    def __init__(self, parent, tool: Tool, on_click, on_right_click=None):
         self.tool = tool
         self.on_click = on_click
+        self.on_right_click = on_right_click
         # 外部软件没有 Python 模块，只看文件在不在
         if tool.is_external:
             self.enabled = tool.ready and tool.external.exists()
@@ -84,9 +86,15 @@ class ToolCard(tk.Frame):
         # 整张卡片（含所有子控件）都要能点
         for w in self._walk():
             w.bind("<Button-1>", self._clicked)
+            # 右键：只有外部软件有菜单（修改/删除）
+            w.bind("<Button-3>", self._right_clicked)
             if self.enabled:
                 w.bind("<Enter>", lambda _e: self._hover(True))
                 w.bind("<Leave>", lambda _e: self._hover(False))
+
+    def _right_clicked(self, event):
+        if self.on_right_click is not None:
+            self.on_right_click(self.tool, event)
 
     def _walk(self):
         stack = [self]
@@ -214,28 +222,10 @@ class Launcher:
 
         body = tk.Frame(self.root, bg=theme.BG)
         body.pack(fill="both", expand=True, padx=theme.PAD, pady=(10, 0))
+        self._body = body
 
-        for group in GROUPS:
-            items = [t for t in TOOLS if t.group == group]
-            if not items:
-                continue
-            row = tk.Frame(body, bg=theme.BG)
-            row.pack(fill="x", pady=(0, 8))
-            tk.Label(row, text=group, bg=theme.BG, fg=theme.ACCENT,
-                     font=theme.F_H2, width=6, anchor="w").pack(side="left", anchor="n",
-                                                                pady=(8, 0))
-            grid = tk.Frame(row, bg=theme.BG)
-            grid.pack(side="left", fill="x", expand=True)
-            for i, tool in enumerate(items):
-                # 左右都留边距：只留右边的话，靠列边界的那张会因为取整差 1 像素，
-                # 视觉上仍能看出参差。
-                ToolCard(grid, tool, self.open_tool).grid(
-                    row=i // 4, column=i % 4, padx=4, pady=(0, 8), sticky="nsew")
-            # 每行都固定 4 列且等宽 —— 否则每组卡片数量不同，各行的卡片宽度
-            # 就会不一样（用户截图里 2/3/4 张的三行明显参差不齐）。
-            # 空出来的槽位不画东西，背景色自然看不见。
-            for c in range(4):
-                grid.columnconfigure(c, weight=1, uniform="toolcol", minsize=138)
+        self._render_groups()
+
 
         # ---- 底部：显存状态条 ----
         # 放在成品目录上面一行，常驻显示，每 2 秒刷新。
@@ -259,6 +249,90 @@ class Launcher:
                  anchor="w").pack(fill="x", pady=7)
 
         self._tick_gpu()
+
+    # ---------------------------------------------------------- 卡片渲染 --
+    def _render_groups(self) -> None:
+        """重新渲染所有分组。添加/删除外部软件后调用。"""
+        for w in self._body.winfo_children():
+            w.destroy()
+
+        tools = all_tools()
+        for group in GROUPS:
+            items = [t for t in tools if t.group == group]
+
+            row = tk.Frame(self._body, bg=theme.BG)
+            row.pack(fill="x", pady=(0, 8))
+
+            head = tk.Frame(row, bg=theme.BG)
+            head.pack(side="left", anchor="n", pady=(8, 0))
+            tk.Label(head, text=group, bg=theme.BG, fg=theme.ACCENT,
+                     font=theme.F_H2, width=6, anchor="w").pack(anchor="w")
+            # 外部软件组给一个添加入口
+            if group == "外部软件":
+                theme.button(head, "＋ 添加", self.add_link, small=True).pack(
+                    anchor="w", pady=(4, 0))
+
+            grid = tk.Frame(row, bg=theme.BG)
+            grid.pack(side="left", fill="x", expand=True)
+
+            if not items:
+                # 空组：给一句说明，别让人以为是坏了
+                hint = ("还没有添加软件。点左边「＋ 添加」，"
+                        "选一个 .exe / .bat，或者一个文件夹。"
+                        if group == "外部软件" else "（暂无）")
+                tk.Label(grid, text=hint, bg=theme.BG, fg=theme.DIM,
+                         font=theme.F_SMALL, anchor="w", justify="left",
+                         wraplength=520).pack(anchor="w", pady=(10, 0), padx=4)
+                continue
+
+            for i, tool in enumerate(items):
+                card = ToolCard(grid, tool, self.open_tool,
+                                on_right_click=self._card_menu)
+                card.grid(row=i // 4, column=i % 4, padx=4, pady=(0, 8),
+                          sticky="nsew")
+            for c in range(4):
+                grid.columnconfigure(c, weight=1, uniform="toolcol", minsize=138)
+
+    def _card_menu(self, tool: Tool, event) -> None:
+        """外部软件卡片上的右键菜单：修改 / 删除。内置工具没有菜单。"""
+        if not tool.link_id:
+            return
+        from shared import links as link_store
+
+        m = tk.Menu(self.root, tearoff=0, bg=theme.CARD, fg=theme.FG,
+                    activebackground=theme.ACCENT, activeforeground="#04121f",
+                    font=theme.F_SMALL, bd=0)
+        m.add_command(label="修改", command=lambda: self.edit_link(tool.link_id))
+        m.add_command(label="删除", command=lambda: self.delete_link(tool.link_id))
+        m.add_separator()
+        item = next((x for x in link_store.load_all() if x.id == tool.link_id), None)
+        if item and item.exists() and not item.is_folder():
+            m.add_command(label="打开所在文件夹",
+                          command=lambda: opener.open_path(item.path.parent))
+        try:
+            m.tk_popup(event.x_root, event.y_root)
+        finally:
+            m.grab_release()
+
+    # ------------------------------------------------------ 外部软件管理 --
+    def add_link(self) -> None:
+        LinkDialog(self.root, on_done=self._render_groups)
+
+    def edit_link(self, link_id: str) -> None:
+        from shared import links as link_store
+        item = next((x for x in link_store.load_all() if x.id == link_id), None)
+        if item:
+            LinkDialog(self.root, item=item, on_done=self._render_groups)
+
+    def delete_link(self, link_id: str) -> None:
+        from shared import links as link_store
+        item = next((x for x in link_store.load_all() if x.id == link_id), None)
+        if not item:
+            return
+        if messagebox.askyesno("删除", f"确定删除「{item.name}」？\n\n"
+                                       f"只是从列表里移除，不会删掉程序本身。"):
+            link_store.delete(link_id)
+            self._render_groups()
 
     # ---------------------------------------------------------- 显存状态 --
     def _tick_gpu(self) -> None:
@@ -425,6 +499,124 @@ class Launcher:
                     "工具异常退出",
                     f"退出码 {code}。\n该工具可能报错了，详情可看它的日志。")
         self.root.after(300, self._watch_child)
+
+
+class LinkDialog(tk.Toplevel):
+    """添加 / 修改一条外部软件链接。
+
+    只有两个字段：名称 + 路径。没有图标选择器（图标按类型和名字自动猜），
+    也没有"描述"（用户自己加的软件，名字就够了）。
+    """
+
+    def __init__(self, parent, item=None, on_done=None) -> None:
+        super().__init__(parent)
+        self.item = item
+        self.on_done = on_done
+
+        self.title("修改软件" if item else "添加软件")
+        self.configure(bg=theme.BG)
+        self.geometry("540x260")
+        self.resizable(False, False)
+        self.transient(parent)
+
+        self.name_var = tk.StringVar(value=item.name if item else "")
+        self.path_var = tk.StringVar(value=item.target if item else "")
+
+        pad = {"padx": 18}
+        tk.Label(self, text=("修改「" + item.name + "」" if item else "添加外部软件"),
+                 bg=theme.BG, fg=theme.FG, font=theme.F_H2).pack(
+            anchor="w", pady=(16, 2), **pad)
+        tk.Label(self, text="可以是 .exe / .bat，也可以选一个文件夹。",
+                 bg=theme.BG, fg=theme.MUTED, font=theme.F_SMALL).pack(
+            anchor="w", **pad)
+
+        card = tk.Frame(self, bg=theme.CARD)
+        card.pack(fill="x", pady=(12, 0), **pad)
+        inner = tk.Frame(card, bg=theme.CARD)
+        inner.pack(fill="x", padx=14, pady=12)
+
+        r1 = tk.Frame(inner, bg=theme.CARD)
+        r1.pack(fill="x")
+        tk.Label(r1, text="名称", bg=theme.CARD, fg=theme.MUTED,
+                 font=theme.F_BODY, width=6, anchor="w").pack(side="left")
+        tk.Entry(r1, textvariable=self.name_var, bg=theme.PANEL, fg=theme.FG,
+                 insertbackground=theme.FG, relief="flat",
+                 font=theme.F_BODY).pack(side="left", fill="x", expand=True, ipady=4)
+
+        r2 = tk.Frame(inner, bg=theme.CARD)
+        r2.pack(fill="x", pady=(10, 0))
+        tk.Label(r2, text="路径", bg=theme.CARD, fg=theme.MUTED,
+                 font=theme.F_BODY, width=6, anchor="w").pack(side="left")
+        tk.Entry(r2, textvariable=self.path_var, bg=theme.PANEL, fg=theme.FG,
+                 insertbackground=theme.FG, relief="flat",
+                 font=theme.F_SMALL).pack(side="left", fill="x", expand=True, ipady=4)
+        theme.button(r2, "浏览…", self.browse, small=True).pack(side="left", padx=(6, 0))
+
+        self.hint = tk.Label(self, text="", bg=theme.BG, fg=theme.WARN,
+                             font=theme.F_SMALL, anchor="w")
+        self.hint.pack(fill="x", pady=(8, 0), **pad)
+
+        btns = tk.Frame(self, bg=theme.BG)
+        btns.pack(fill="x", pady=(10, 16), **pad)
+        theme.button(btns, "保存" if item else "添加", self.save,
+                     primary=True).pack(side="left")
+        theme.button(btns, "取消", self.destroy, small=True).pack(side="left", padx=(8, 0))
+
+    def browse(self) -> None:
+        """先让用户选程序；想加文件夹就点"取消"再点文件夹按钮。"""
+        choice = messagebox.askyesnocancel(
+            "选择类型",
+            "要添加**程序**（.exe / .bat）吗？\n\n"
+            "是 = 选程序文件\n否 = 选文件夹\n取消 = 什么都不做")
+        if choice is None:
+            return
+        if choice:
+            f = filedialog.askopenfilename(
+                title="选程序",
+                filetypes=[("程序", "*.exe *.bat *.cmd *.lnk"), ("全部", "*.*")])
+            if not f:
+                return
+            p = Path(f)
+            self.path_var.set(str(p))
+            if not self.name_var.get().strip():
+                self.name_var.set(p.stem)
+        else:
+            d = filedialog.askdirectory(title="选文件夹")
+            if not d:
+                return
+            p = Path(d)
+            self.path_var.set(str(p))
+            if not self.name_var.get().strip():
+                self.name_var.set(p.name)
+
+    def save(self) -> None:
+        from shared import links as link_store
+
+        name = self.name_var.get().strip()
+        target = self.path_var.get().strip()
+
+        if not target:
+            self.hint.config(text="要填一个路径")
+            return
+        p = Path(target)
+        if not p.exists():
+            self.hint.config(text=f"这个路径不存在：{target}")
+            return
+        if not name:
+            name = p.stem if p.is_file() else p.name
+
+        if self.item is None:
+            link_store.add(link_store.new_link(name, target))
+        else:
+            self.item.name = name
+            self.item.target = target
+            # 目标类型重算（用户可能从文件改成了文件夹）
+            self.item.kind = "folder" if p.is_dir() else "auto"
+            link_store.update(self.item)
+
+        if callable(self.on_done):
+            self.on_done()
+        self.destroy()
 
 
 def launch() -> int:
