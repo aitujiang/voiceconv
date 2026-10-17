@@ -49,6 +49,8 @@ class App:
         self.q: queue.Queue[tuple[str, str]] = queue.Queue()
         self.last_out: Path | None = None
         self.t0 = 0.0
+        # 自检时置 True：合成完不弹资源管理器（无头测试里弹窗会抢焦点）
+        self.quiet = False
 
         self.speed = tk.DoubleVar(value=1.0)
         self.lang = tk.StringVar(value="zh")
@@ -415,7 +417,10 @@ class App:
             self.status.config(
                 text=f"完成！{info.frames/info.samplerate:.2f} 秒语音，"
                      f"用时 {time.time()-self.t0:.0f} 秒\n{out}", fg=theme.OK)
-            opener.open_path(out, select=True)
+            # 自检时不要弹资源管理器 —— 无头测试里它会抢焦点，
+            # 实测还会连带把 Tk 的控件弄失效（自检读到 status 时抛 TclError）。
+            if not self.quiet:
+                opener.open_path(out, select=True)
         else:
             self.status.config(text="合成结束但没有找到输出文件", fg=theme.WARN)
 
@@ -494,6 +499,11 @@ def selftest() -> int:
     paths.ensure_dirs()
     root = tk.Tk()
     app = App(root, on_back=None)
+    app.quiet = True                  # 自检不弹资源管理器
+    # 自检产物必须进 _sandbox。以前靠外部设 DSH_SANDBOX=1，
+    # 忘了设就会写进用户真正的 io\output —— 这是造成过实际损失的事故类型，
+    # 所以改成自检内部自己设，不依赖调用方。
+    os.environ["DSH_SANDBOX"] = "1"
     root.update_idletasks()
     root.update()
 
