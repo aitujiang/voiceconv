@@ -11,7 +11,11 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 from huggingface_hub import hf_hub_download  # noqa: E402
 
-SRC = r"D:\dshworking01\voiceconv\src\seed-vc-main"
+from pathlib import Path as _Path           # noqa: E402
+
+# 基于本文件位置推导，不写死绝对路径 —— 项目放哪都能跑
+ROOT = _Path(__file__).resolve().parent
+SRC = str(ROOT / "src" / "seed-vc-main")
 CACHE = os.path.join(SRC, "checkpoints")
 
 # (repo_id, filename) -- one entry per distinct blob Seed-VC may ask for.

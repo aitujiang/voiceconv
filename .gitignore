@@ -127,3 +127,20 @@ $RECYCLE.BIN/
 *备份*/
 *backup*/
 *_bak/
+
+# --------------------------------------------------------------------------- #
+# 我自己的东西：本地留着用，不上传到 GitHub
+# --------------------------------------------------------------------------- #
+# 我的音色预设（含我自己的绝对路径和素材文件名）
+data/presets/*.json
+
+# 我的调试/分析脚本
+analyze_result.py
+locate_loss.py
+verify_loss.py
+compare_vocals.py
+check_preset_share.py
+make_launchers.py
+
+# 我的开发日志
+setup_log.md

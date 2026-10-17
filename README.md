@@ -1,348 +1,351 @@
 # 素材工具箱
 
-一个本地离线的素材处理工具箱。目前有 **4 个可用工具**，另有 8 个预留位置。
+一站式二创素材处理工具。把「找素材 → 处理 → 出成品」这一串零散步骤，
+收进一个能和 AI 能力连起来的桌面工具箱。
 
-**入口：双击 `启动.bat`**
-
-```
-┌──────────────────────────────────────────────┐
-│  🧰 素材工具箱                                │
-├──────────────────────────────────────────────┤
-│  素材获取                                     │
-│  📥 视频下载    🎵 音频提取    🔗 素材网站      │
-│  （未开发）      ✅ 可用        ✅ 可用         │
-│                                              │
-│  声音处理                                     │
-│  🎙 AI 变声     📚 音色库                    │
-│  ✅ 可用         ✅ 可用                      │
-│                                              │
-│  后续规划（灰显，点了能看到计划）                │
-│  ⚙ 预设  📖 AI朗读  ✂剪辑  💬字幕  🖼图片 ...  │
-└──────────────────────────────────────────────┘
-```
-
-灰显的卡片**点一下会弹出说明窗**，讲清楚这个工具是干什么的、打算怎么做。
+**Windows 本地运行，全离线**（除了首次下载模型）。
 
 ---
 
-## 当前可用
+## 能做什么
 
-| 工具 | 做什么 |
+### 素材获取
+
+| 工具 | 说明 |
 |---|---|
-| 🎙 **AI 变声** | 单段换声 / 整曲换主唱（保留伴奏）/ 文件夹批量 |
-| 📖 **AI 朗读** | 打字 → 用角色声音念出来（GPT-SoVITS 零样本克隆） |
-| 📚 **音色库** | 管理音色：一段素材 + 一套参数，存一次反复用 |
-| 🎵 **音频提取** | 视频 → 音频，支持批量，零依赖（直接调 ffmpeg） |
-| 🔗 **素材网站** | 常用素材站快捷入口，可自己增删 |
+| 🎵 **音频提取** | 从视频里抽出音频，支持批量、三种输出格式 |
+| 🎤 **人声分离** | 拆成人声 + 伴奏（Demucs），训练素材去 BGM 用 |
+| 📊 **响度标准化** | 音量统一到平台标准（-14 LUFS 等），避免上传后被压 |
+| 💬 **字幕识别** | 音视频转文字，输出 SRT + TXT（Whisper） |
+| 🔗 **素材网站** | 常用素材站导航，可自己增删 |
+
+### 声音处理
+
+| 工具 | 说明 |
+|---|---|
+| 🎙 **AI 变声** | 换音色、整曲换主唱。零样本，给段参考音频就能用（Seed-VC） |
+| 📚 **音色库** | 音色预设管理：素材 + 参数一起存，一键调用 |
+| 📖 **AI 朗读** | 打字，用指定音色念出来（GPT-SoVITS） |
+| 🎛 **RVC 变声器** | 训练专属音色模型，原版 WebUI |
+
+### 外部软件
+
+用户自己添加的 .exe / .bat / 文件夹，点一下启动。
+适合把 ComfyUI、剪辑软件这些常用工具也收进来。
 
 ---
 
-## 📖 AI 朗读
+## 三种「换声音」的路线
 
-**打字 → 用你选的音色念出来**，不需要你录音。
+这个工具箱里其实有三套不同的 AI 声音技术，各有适用场景：
 
-1. 打开「AI 朗读」
-2. **① 用谁的声音**：点一个已有的音色卡片，或手动选一段参考音频
-3. **② 要念什么**：打字或粘贴文字（建议一次不超过 500 字）
-4. 可调语速、选语言（中文 / 英文 / 自动）
-5. 点「生成语音」
-
-**耗时**：首次要加载模型，约 15~60 秒；之后同样因为要重新加载，每次约 15 秒。
-**输出**：32kHz 单声道 wav，落在 `io\output\`。
-
-### 它和「变声」的区别
-
-| | 变声 | 朗读 |
-|---|---|---|
-| 输入 | 一段**人声** | **文字** |
-| 语气从哪来 | **你自己录的语气** | 文字内容本身，偏平稳 |
-| 适合 | 你想演出情绪、保留自己的演绎 | 快速造一段话、旁白、假对话 |
-
-**想要「有人味、有情绪」用变声；想要「只给文字」用朗读。**
-
----
-
-## 🔊 两种音色来源（变声和朗读都有）
-
-两个工具里都有这个二选一：
-
-| 来源 | 图标 | 用什么 | 现在能用吗 |
+| 需求 | 用什么 | 要训练吗 | 参考音频 |
 |---|---|---|---|
-| **用音频** | 🔊 | 一段参考音频，当场克隆（零样本） | ✅ **能用，即选即用** |
-| **用训练模型** | 🧠 | 训练好的模型文件 | ❌ 训练功能未开发，但界面已经说明要求 |
+| **快速试音色** | AI 变声（Seed-VC） | ❌ 零样本 | 需要，5~25 秒 |
+| **固定角色长期用** | RVC | ✅ 训一次，永久用 | 不需要 |
+| **只有文字没有人声** | AI 朗读（GPT-SoVITS） | ❌ 零样本，也可训练 | 需要 |
 
-选「用训练模型」那一档时，界面会**直接列出素材要求**（时长、干净度、耗时、环境），
-旁边还有「素材要求？」按钮可以看完整说明。
+**它们不是替代关系，是互补的。** 而且**模型互不通用** ——
+同一个角色要做「变声」和「朗读」，得分别准备。
 
-### 两种训练产物互不通用（重要）
+---
 
-| 训练产出 | 只能用在 | 素材要求 |
+## 系统要求
+
+| 项目 | 要求 |
+|---|---|
+| 系统 | Windows 10 / 11，64 位 |
+| 显卡 | **NVIDIA**，建议 8 GB 显存以上 |
+| 磁盘 | 约 20 GB（含引擎和模型） |
+| Python | 3.10+ |
+| 内存 | 16 GB 建议 |
+
+### ⚠️ 关于显卡
+
+- **只支持 NVIDIA**。Seed-VC 和 GPT-SoVITS 依赖 CUDA，AMD 显卡跑不了。
+- **RTX 50 系**（Blackwell / sm_120）需要 PyTorch 2.7+ 且带 cu128 内核。
+  低版本 PyTorch 在这代卡上**装不上或跑不起来**。
+- 显存小于 6 GB 时，训练类功能会很紧张。
+
+---
+
+## 安装
+
+> 目前还没有一键安装脚本，需要手动几步。完整流程如下。
+
+### 1. 检查显卡和驱动
+
+```powershell
+nvidia-smi
+```
+
+能看到显卡型号和 CUDA Version 就正常。如果报错，先装 [NVIDIA 驱动](https://www.nvidia.cn/drivers/)。
+
+**记录你的驱动版本** —— 它决定能用哪个 CUDA 版本：
+
+| 驱动版本 | 最高 CUDA |
+|---|---|
+| ≥ 570 | 12.8（50 系必需） |
+| 530 ~ 569 | 12.1 |
+| 520 ~ 529 | 11.8 |
+
+### 2. 装 Python 3.10+
+
+从 [python.org](https://www.python.org/downloads/) 下载安装，
+**安装时务必勾选 `Add Python to PATH`**。
+
+验证：
+```powershell
+python --version
+```
+
+### 3. 装 PyTorch
+
+**50 系显卡**（RTX 5060/5070/5080/5090）：
+```powershell
+python -m pip install torch==2.7.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
+```
+
+**40 系及更早**：
+```powershell
+python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+验证 GPU 能用：
+```powershell
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+应该输出 `True` 和你的显卡型号。
+
+### 4. 建虚拟环境并装依赖
+
+```powershell
+cd voiceconv
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+```
+
+> 依赖装不上时优先换国内源，实测北大镜像（4 秒响应）比官方源（160 秒）快很多：
+> ```powershell
+> .venv\Scripts\pip install -r requirements.txt --index-url https://mirrors.pku.edu.cn/pypi/simple
+> ```
+
+### 5. 下载引擎
+
+三套引擎要分别下载到指定位置：
+
+```powershell
+# 变声（Seed-VC）
+git clone https://github.com/Plachtaa/seed-vc src\seed-vc-main
+
+# 朗读（GPT-SoVITS）→ 放到 tools\tts\engine
+git clone https://github.com/RVC-Boss/GPT-SoVITS tools\tts\engine
+
+# RVC → 放到 tools\rvc\engine
+git clone https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI tools\rvc\engine
+```
+
+### 6. 下载模型权重
+
+约 8 GB。国内直连 HuggingFace 会超时，代码里已经默认走 `hf-mirror.com`。
+
+```powershell
+.venv\Scripts\python download_models.py        # Seed-VC 权重
+.venv\Scripts\python download_rvc_models.py    # RVC 权重（HuBERT + RMVPE）
+.venv\Scripts\python download_tts_models.py    # GPT-SoVITS 权重
+```
+
+### 7. 启动
+
+```
+双击  启动.bat
+```
+
+---
+
+## 只想要音频工具？
+
+如果只用「音频提取 / 响度标准化 / 素材网站」这三个，
+**不需要装 PyTorch 和任何引擎** —— 它们只依赖 ffmpeg：
+
+1. 下载 [ffmpeg](https://www.gyan.dev/ffmpeg/builds/)，把 `ffmpeg.exe` 和
+   `ffprobe.exe` 放进 `bin\` 目录
+2. 双击 `启动.bat`
+
+这三个工具在纯 CPU 机器上也能跑。
+
+---
+
+## 快速上手
+
+### 换一个声音
+
+1. 点「🎙 AI 变声」
+2. ① 选要变声的音频
+3. ② 选音色参考音频（5~25 秒干净人声）
+4. 点「存为预设」起个名字 —— 以后不用再找素材
+5. 点「开始变声」
+
+首次要加载模型（1~3 分钟），之后每次约 15 秒。
+
+### 整首歌换主唱
+
+1. 点「🎙 AI 变声」
+2. 选音色 → 选整首歌
+3. 类型选「整曲换人声（保留伴奏）」
+4. 它会自动做三步：分离人声 → 变声 → 混回伴奏
+
+**人声盖住伴奏时**：调低「人声增益」（默认 1.0，试 0.55）。
+
+### 训一个专属音色
+
+1. 素材放 `data\datasets\<角色名>\`（5~10 分钟同角色人声）
+2. 点「🎛 RVC 变声器」→ 启动 RVC
+3. 在 WebUI 的训练页操作：填实验名 → 一键处理数据 → 特征提取 → 训练 → 训练特征索引
+4. 训练完，模型会出现在 RVC 的模型下拉里
+
+详细参数见 [`训练素材要求.md`](训练素材要求.md)。
+
+---
+
+## 项目结构
+
+```
+voiceconv\
+├── 启动.bat                  入口
+├── launcher.py               工具箱主界面
+├── oneclick.py               AI 变声
+├── convert.py                单条变声（命令行）
+├── song.py                   整曲换主唱（分离+变声+混音）
+├── prepare_dataset.py        训练数据准备（切片 + Whisper 自动标注）
+├── train_model.py            GPT-SoVITS 训练流水线
+├── download_*.py             模型权重下载
+├── shared\                   共用模块
+│   ├── paths.py              路径定义 + 子环境路径自愈
+│   ├── theme.py              配色和字体
+│   ├── presets.py            音色预设
+│   ├── links.py              外部软件列表
+│   ├── vram.py               显存监控
+│   ├── training_spec.py      训练素材要求（单一事实来源）
+│   ├── tools_registry.py     工具注册表
+│   └── opener.py             打开文件/网址（多级回退）
+├── tools\                    各工具的界面
+│   ├── audio\                音频提取 / 人声分离 / 响度 / 字幕
+│   ├── voice\                变声 / 音色库
+│   ├── tts\                  AI 朗读
+│   ├── rvc\                  RVC 入口
+│   └── sites\                素材网站
+├── data\                     配置（预设、网站列表）
+├── io\output\                所有成品
+├── bin\                      ffmpeg
+├── src\                      Seed-VC 引擎（需自行下载）
+└── models\                   权重缓存
+```
+
+---
+
+## 技术说明
+
+### 三个 Python 环境共用一份 PyTorch
+
+变声、朗读、RVC 各自需要不同版本的依赖（比如 GPT-SoVITS 要
+`transformers 4.57`，RVC 要 `4.49`，两者不能共存）。
+
+所以做了三个虚拟环境。但 **PyTorch 有 5.4 GB**，装三份太浪费 ——
+后两个环境用 `--system-site-packages` + 一个 `.pth` 文件指向
+`.venv` 的包目录，这样它们能看见 torch，但自己装的包不会污染回去。
+
+### 子环境路径自愈
+
+上面的做法有个副作用：`.pth` 和 `pyvenv.cfg` 里写死了 `.venv` 的绝对路径。
+项目一旦改名或移动，「变声/朗读/RVC」会全部报错，而界面上看不出原因。
+
+`shared/paths.py` 里的 `fix_venv_paths()` 会在每次启动时检查并修正这两处，
+所以**改名、移动、换盘符都能正常用**。
+
+### 显存管理
+
+三个 AI 工具都要吃显存，而显存是**按进程隔离**的。
+
+- 启动器底部常驻显示整卡占用（读 `nvidia-smi`，能看到所有进程）
+- 每个工具内部有「释放显存」按钮，只释放**自己进程**的
+- 关闭工具时自动释放
+- 训练前会按显存给出 batch size 建议
+
+---
+
+## 常见问题
+
+### 装了 PyTorch 但 `torch.cuda.is_available()` 是 False
+
+大概率装成了 CPU 版。查一下：
+```powershell
+python -c "import torch; print(torch.__version__)"
+```
+带 `+cpu` 就是 CPU 版，卸载重装 [正确的 CUDA 版](https://pytorch.org/get-started/locally/)。
+
+### `PermissionError: [WinError 5] ... .cache\huggingface`
+
+模型缓存目录没写权限。代码里已经把 `HF_HOME` / `TORCH_HOME` 指到项目内，
+如果还报错，手动设环境变量：
+```powershell
+set HF_HOME=D:\你的路径\voiceconv\models\hfcache
+set TORCH_HOME=D:\你的路径\voiceconv\models\torch
+```
+
+### 变声出来的声音不像
+
+1. **参考音频质量最关键** —— 5~25 秒、干净、无 BGM
+2. 换「说话·更像参考」模式
+3. 调「音色相似度」（越高越像，但可能不自然）
+4. 用 RVC 训练专属模型，效果通常更好
+
+### 整首歌里人声太响，盖住伴奏
+
+变声后的人声可能比原来响 6~9 dB。调低「人声增益」到 0.5~0.6。
+
+### 训练时爆显存
+
+调小 batch size：
+```powershell
+python train_model.py --character 角色名 --batch-gpt 4 --batch-sovits 2
+```
+已完成的步骤会自动跳过，不用从头来。
+
+### 显卡是 AMD，能跑吗
+
+**不能。** 变声和朗读依赖 CUDA。纯音频工具（提取 / 响度 / 素材网站）可以，
+但那三个本来也不需要 GPU。
+
+---
+
+## 依赖的开源项目
+
+这个项目本身只做整合和界面，所有 AI 能力都来自下面这些项目：
+
+| 项目 | 用途 | 许可证 |
 |---|---|---|
-| **GPT-SoVITS 模型** | 📖 AI 朗读 | **必须干净人声**，5 分钟起 |
-| **RVC 模型** | 🎙 AI 变声 | 建议干净，**可容忍少量背景音**，5 分钟起 |
+| [Seed-VC](https://github.com/Plachtaa/seed-vc) | 零样本变声 | **GPL-3.0** |
+| [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) | 语音合成 | MIT |
+| [RVC](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) | 训练式变声 | MIT |
+| [Demucs](https://github.com/facebookresearch/demucs) | 人声分离 | MIT |
+| [Whisper](https://github.com/openai/whisper) | 语音识别 | MIT |
+| [FFmpeg](https://ffmpeg.org) | 音视频处理 | LGPL / GPL |
 
-**同一个角色要两边都用，得训两次。**
-
-📄 完整说明见 **[训练素材要求.md](训练素材要求.md)**
-
----
-
-## ⭐ 音色预设：不用每次重选素材
-
-这是最省事的功能。用一次就回不去了：
-
-**第一次（建音色）——三种入口都行：**
-
-- **AI 变声** → 选好参考音频 → 点「存为预设」
-- **AI 变声** → ③ 音色预设 → 点「＋ 新建音色」（直接从素材建，不用先选）
-- **📚 音色库** → 「＋ 新建音色」
-
-**以后每次：**
-1. 打开变声或朗读界面
-2. **点一下那个名字**
-3. 素材和所有参数**自动填好**
-
-也可以在「📚 音色库」里集中管理（新建 / 编辑 / 复制 / 删除 / 试听）。
-**两个工具读写同一份数据**，在哪边改都一样。
-
-### 素材丢了会怎样
-不会静默失败。卡片会**标红**并显示「素材找不到了：xxx.wav」，
-点它有「重新指定」按钮，换一个文件后其他参数保持不变。
+本仓库**不包含**上述项目的代码和模型权重，需要按安装步骤自行下载。
 
 ---
 
-## 环境
+## 许可证
 
-| 组件 | 位置 |
-|---|---|
-| 变声引擎 | Seed-VC（`src\seed-vc-main`）+ 5.2GB 权重 |
-| 朗读引擎 | GPT-SoVITS v2final（`tools\tts\engine`） |
-| RVC 变声器 | RVC 2.3 原版 WebUI（`tools\rvc\engine`） |
-| 人声分离 | Demucs 4.1.0 |
-| ffmpeg / ffprobe 9.0.2 | `bin\`（全工具箱共享） |
-| PyTorch | 2.7.0 + CUDA 12.8（含 RTX 50 系 Blackwell 内核） |
-| Python 环境 | `.venv`（变声用）、`tools\tts\venv`、`tools\rvc\venv` |
-| 预设数据 | `data\presets\*.json` |
-| 素材网站列表 | `data\sites.json` |
-| 所有成品 | `io\output\` |
+[GPL-3.0](LICENSE)。
 
-**三套 Python 环境共用同一份 torch**：后两个用 `.pth` 指向 `.venv\Lib\site-packages`，
-所以各自只装自己需要的包，省下 2 × 5.4GB。
-
-## 🎮 显存管理
-
-工具箱底部常驻显示显存占用（读 `nvidia-smi`，能看到**所有**进程）：
-
-```
-显存  ████░░░░░░░░░░░░  4.2/8.0 GB   62°C
-```
-
-| 功能 | 在哪 | 说明 |
-|---|---|---|
-| 显存实时显示 | 启动器底部 + 各工具内 | 占用 >60% 变黄，>85% 变红 |
-| **显存详情** | 启动器「显存详情」/ RVC 入口 | 列出占用进程，可强制结束 |
-| **释放显存** | 变声 / 朗读工具内 | 还回本进程占的显存 |
-| **关闭自动释放** | 所有工具 | 关窗口时自动还显存 |
-| **参数防护** | 训练管线 | 批大小超出显存承载时警告 |
-
-**重要**：显存按**进程**隔离。工具内的「释放」只释放它自己（有效）；
-启动器的「显存详情」能看到别人，但要清掉只能结束进程。
-
-**当前总占用约 16 GB**（torch 5.4GB 三环境共用、模型权重 5.2GB、
-RVC 2.3GB）。已通过删除链接库/头文件/缓存瘦身若干。
+采用 GPL-3.0 是因为核心功能依赖 Seed-VC（GPL-3.0），
+按 GPL 的传染性，本项目也需要使用同一许可证。
 
 ---
 
-## ⭐ 最简单的用法：双击就能用
+## 免责声明
 
-在 `D:\dshworking01\voiceconv\` 里，有两个可以**直接双击**的入口：
-
-### 方式一：双击「一键变声.bat」（推荐）
-
-弹出一个窗口，两步搞定：
-
-1. 点「① 要变声的音频」→ 选择**音频 2**（内容保留这段）
-2. 点「② 音色参考音频」→ 选择**音频 1**（借用这段的音色）
-3. 点「开始变声」，等进度条跑完
-
-**成品会自动弹出所在文件夹**（`io\output\`），双击就能试听。
-
-窗口里的「高级选项」默认值已经调好，不用动：
-- **类型**：默认「说话（推荐）」。想更像参考音色就选「说话·更像参考」；第二段是唱歌就选「唱歌」。
-- **音色相似度**：默认 0.7，嫌不够像就拉到 0.85~1.0。
-- **精细度**：默认 30，够用；想更细腻拉到 40~50（更慢）。
-
-> 首次点「开始变声」会加载模型，要等 1~3 分钟，属正常。之后每次只要几十秒。
-
-### 方式二：拖拽（熟练后用）
-
-把**两个音频文件一起选中，拖到**「一键变声-拖拽两个文件到这里.bat」图标上：
-
-- 拖进去的**第一个** = 要变声的音频（音频 2）
-- 拖进去的**第二个** = 音色参考音频（音频 1）
-
-**顺序不能反**，反了会变成拿音频 2 的音色去说音频 1 的话。不确定就用方式一。
-
----
-
-## 命令行用法（想批量处理时）
-
-```powershell
-cd D:\dshworking01\voiceconv
-.\.venv\Scripts\python.exe convert.py --source "音频2.mp3" --target "音频1.wav"
-```
-
-结果写到 `io\output\`。
-
----
-
-## 环境（已装好，无需重装）
-
-| 组件 | 位置 / 版本 |
-|---|---|
-| Python | `D:\dshworking01\voiceconv\.venv`（3.12） |
-| PyTorch | 2.7.0 + CUDA 12.8（含 RTX 50 系 Blackwell `sm_120` 内核） |
-| GPU | RTX 5060 Ti 8GB，驱动 576.88 |
-| ffmpeg / ffprobe | `bin\ffmpeg.exe`、`bin\ffprobe.exe` |
-| Seed-VC 源码 | `src\seed-vc-main` |
-| 模型权重 | `src\seed-vc-main\checkpoints`（约 3.2 GB，含 v1 / v2 / 歌声三套） |
-| HuggingFace 通道 | 走 `hf-mirror.com`（本机直连 huggingface.co 超时） |
-
-### 两个必须知道的兼容处理
-
-1. **`torch.load` 兼容层**：PyTorch ≥2.6 把默认值改成了 `weights_only=True`，而 Seed-VC 是按 2.4 写的，会加载失败。而 CUDA 12.8 最低只能装到 2.7.0，所以用了
-   `\.venv\Lib\site-packages\sitecustomize.py` 把这个默认值恢复成旧行为。**不要删这个文件**，除非你换回 torch ≤2.5。
-2. **HF 镜像**：脚本已自动设置 `HF_ENDPOINT=https://hf-mirror.com`。首次跑某个模式时会自动补下缺的权重（whisper-small / BigVGAN 声码器）。
-
----
-
-## 三种模式怎么选
-
-| 模式 | 适用场景 | 采样率 | 输出内容 | 特点 |
-|---|---|---|---|---|
-| `--mode v1`（默认） | 两段都是说话 | 22.05 kHz | **只有干声** | 最快最稳 |
-| `--mode v2` | 说话，想更彻底抹掉原说话人特征 | 22.05 kHz | **只有干声** | 抑制原音色/口音更强 |
-| `--mode singing` | 第二段是唱歌 | 44.1 kHz | **只有干声** | 带音高条件，保留旋律 |
-| **`--mode song`** | **整首歌，要保留伴奏** | 44.1 kHz | **完整歌曲** | **自动分离人声→变声→混回伴奏** |
-
-### ⚠️ 最重要的一条：伴奏
-
-**Seed-VC 只在人声上训练，看不懂伴奏。** 你直接拿一首带伴奏的歌喂给 v1/v2/singing，伴奏会被当成噪声——**要么丢掉，要么变成杂音**，出来的只有一条干声。
-
-想要「换掉主唱但保留伴奏的完整歌曲」，必须用 **`song` 模式**（或先把歌分离成人声再转换）：
-
-```
-① 分离：歌曲 → 人声 + 伴奏     Demucs（htdemucs）
-② 变声：人声 → 换成目标音色     Seed-VC
-③ 混音：新人声 + 原伴奏 → 新歌  峰值归一化，防止削波
-```
-
-```powershell
-# 整曲换人声（保留伴奏）——命令行版
-.\.venv\Scripts\python.exe song.py --song "我的歌.mp3" --voice "音色参考.wav"
-
-# 想调人声/伴奏比例
-.\.venv\Scripts\python.exe song.py --song 歌.mp3 --voice 参考.wav --vocal-gain 1.1 --inst-gain 0.9
-```
-
-在图形界面里，把「类型」选成 **「整曲换人声（保留伴奏）」** 即可，其余一样。
-
-### 说完歌再看单段音频
-
-```powershell
-# 说话（推荐先试这个）
-.\.venv\Scripts\python.exe convert.py --source 音频2.wav --target 音频1.wav --mode v1
-
-# 想更像参考音色 / 更彻底去原音色
-.\.venv\Scripts\python.exe convert.py --source 音频2.wav --target 音频1.wav --mode v2 --similarity-cfg-rate 0.85
-
-# 唱歌（输出干声）
-.\.venv\Scripts\python.exe convert.py --source 歌曲.wav --target 音色.wav --mode singing
-```
-
-### 常用参数
-
-| 参数 | 作用 |
-|---|---|
-| `--steps 30` | 扩散步数。调高（如 50）质量略好但更慢；调到 10~15 可快速试听 |
-| `--cfg-rate 0.7` | 跟随参考音色的强度，0~1。v1 直接用它，v2 用它作「可懂度」 |
-| `--similarity-cfg-rate 0.7` | **仅 v2**：音色相似度强度，想更像就往上调 |
-| `--semi-tone-shift -2` | 变调（主要给 singing 模式用，男女对唱常用 ±5~12） |
-| `--length-adjust 1.1` | >1 变慢、<1 变快，默认 1.0 |
-| `--out D:\x\结果.wav` | 指定输出路径 |
-
----
-
-## 让效果变好的关键：参考音频（音频 1）怎么准备
-
-音色还原度几乎完全由参考音频决定：
-
-- **长度 5~25 秒**：脚本会自动裁到前 25 秒（Seed-VC 的硬上限），并自动去掉首尾静音。
-- **单人、干净、无背景音乐**：有第二个人说话或有 BGM，音色会被「平均」掉。
-- **不要有混响**：手机贴嘴录的一段干声，效果远好于在空房间里远场录的。
-- **情绪平稳的一段连续说话**：情绪剧烈波动会让音色特征不准。
-- 采样率随便（脚本用 ffmpeg 统一重采样），格式 mp3/m4a/wav/flac 都行。
-
----
-
-## 排错
-
-| 现象 | 原因 / 处理 |
-|---|---|
-| `ffmpeg not found` | 确认 `bin\ffmpeg.exe` 存在 |
-| 首次运行卡在下载 | 正常，正在从镜像补权重；`src\seed-vc-main\checkpoints` 会变大 |
-| `UnpicklingError: Weights only load failed` | `sitecustomize.py` 被删了，恢复它 |
-| `ModuleNotFoundError: No module named 'dac'` | 缺 `descript-audio-codec`，装它 |
-| `CUDA out of memory` | 加 `--fp16 true`（默认已开），或 `--steps 20`；也可先 `--mode v1` |
-| 输出音色不像 | 换一段更长更干净的参考音频；v2 模式调高 `--similarity-cfg-rate` |
-| 输出有金属音/电音 | 提高 `--steps` 到 40~50；确认参考音频没有削波失真 |
-| 开始变声按钮点不动 | 两个音频都要选好才会亮；`--selftest` 可自检界面 |
-
-### 自检命令（排查界面/环境问题用）
-
-```powershell
-.\.venv\Scripts\python.exe oneclick.py --selftest        # 只构建界面，不转换
-.\.venv\Scripts\python.exe analyze_result.py <音色参考.wav> <待变声.wav> <成品.wav>
-```
-
-`analyze_result.py` 会打印基频、谱质心、频段能量占比，用来客观判断音色是否真的迁移了。
-
----
-
-## 已完成的验证
-
-| 验证项 | 结果 |
-|---|---|
-| GPU 可用性 | ✅ RTX 5060 Ti，实测算力 2335 GFLOPS |
-| Blackwell 内核 | ✅ `arch_list` 含 `sm_120`（无此内核会退回 CPU） |
-| 权重加载 | ✅ campplus 937 个权重键，`torch.load` 兼容层生效 |
-| 端到端推理（v1） | ✅ 4.24 秒音频 → 20 步推理 1.5 秒，RTF 0.36，总耗时 58 秒 |
-| 推理速度（12 步） | ✅ RTF 0.26，总耗时 13.6 秒 |
-| 中文文件名 + mp3 输入 | ✅ 正常，staging 与输出名带唯一短哈希 |
-| 一键 GUI | ✅ 界面 34 个控件构建成功，全流程自动测试通过 |
-
-**未验证**：音色克隆的**主观音质**。原因是验证只用了合成脉冲音频（`io\test_*.wav`，不是人声），Seed-VC 的语音分词器对非语音信号只能给出无意义的结果。真实效果必须用你的人声才能判断。
-
----
-
-## 目录里其它文件
-
-- `一键变声.bat` — **双击入口**（图形界面，推荐）
-- `一键变声-拖拽两个文件到这里.bat` — 拖拽入口（顺序：先要变声的，后音色参考）
-- `oneclick.py` — 图形界面本体（`--selftest` 自检 / `--auto` 无人值守全流程）
-- `convert.py` — 单段音频变声（ffmpeg 预处理 + UTF-8 文件名安全 + 参数分流）
-- **`song.py`** — **整曲换声：Demucs 分离 + 变声 + 混回伴奏**
-- `analyze_result.py` — 客观对比音色是否迁移
-- `download_models.py` — 权重下载器（走 hf-mirror，可重复运行补齐缺失文件）
-- `make_test_audio.py` — 合成两个不同音色的测试音频，用于验证管线是否正常
-- `make_launchers.py` — 重新生成两个 .bat（纯 ASCII，避免中文代码页问题）
-- `setup_log.md` — 搭建过程与踩坑记录
-
-## 依赖补充说明
-
-| 组件 | 用途 | 位置 |
-|---|---|---|
-| Seed-VC | 变声 | `src\seed-vc-main` |
-| **Demucs 4.1.0** | **人声/伴奏分离** | `song.py` 调用 |
-| htdemucs 权重 | 分离模型 | `models\hfcache`（约 80MB） |
-| ffmpeg 9.0.2 | 音频解码/重采样/混音 | `bin\` |
+本项目仅供个人学习与创作使用。使用他人声音训练模型、或生成模仿他人
+的内容时，请自行确认素材授权与当地法律法规。生成内容的相关责任由使用者承担。

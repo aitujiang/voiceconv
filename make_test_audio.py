@@ -72,7 +72,9 @@ def build(f0: float, formants, n_syl: int, seed: int) -> np.ndarray:
 
 
 def main() -> int:
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else r"D:\dshworking01\voiceconv\io")
+    # 默认输出到项目自己的 io\ 目录，不写死绝对路径
+    default = Path(__file__).resolve().parent / "io"
+    out = Path(sys.argv[1] if len(sys.argv) > 1 else default)
     out.mkdir(parents=True, exist_ok=True)
 
     # Speaker A -- to be used as the TIMBRE REFERENCE (audio 1)

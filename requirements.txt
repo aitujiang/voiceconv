@@ -1,0 +1,40 @@
+# 变声环境（.venv）的依赖。
+#
+# 注意：**PyTorch 不在这个文件里**。
+# 因为 torch 的版本取决于你的显卡（见 README「安装」第 3 步）：
+#   · RTX 50 系（sm_120）→ 必须 2.7.0+cu128
+#   · 40 系及更早       → cu121 / cu118 都行
+# 把 torch 钉死在这里，50 系以外的卡会装不上或跑不起来。
+#
+# 先按 README 装好 torch，再装这个文件。
+
+# ---- 音频 ----
+numpy==1.26.4
+scipy>=1.13
+librosa>=0.10.2
+soundfile>=0.13
+pydub
+ffmpeg-python
+
+# ---- 人声分离 ----
+demucs==4.1.0
+
+# ---- 变声 / 语音模型 ----
+transformers>=4.46,<4.50
+einops>=0.8
+pyworld
+praat-parselmouth
+torchcrepe
+faiss-cpu
+local-attention
+
+# ---- 工具 ----
+tqdm
+pyyaml
+matplotlib
+pillow
+requests
+huggingface_hub
+
+# ---- 界面（tkinter 是标准库，不需要装） ----
+# 无额外依赖
