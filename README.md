@@ -71,17 +71,52 @@
 
 ## 安装
 
-> 目前还没有一键安装脚本，需要手动几步。完整流程如下。
+### 快速方式（推荐）
 
-### 1. 检查显卡和驱动
+装好 Python 3.10+ 之后，在项目目录里跑：
+
+```powershell
+python setup.py
+```
+
+它会依次做这些事，**每一步都可以单独重跑**：
+
+| 步骤 | 内容 |
+|---|---|
+| 0 | **体检** —— 读显卡型号、驱动版本、显存、磁盘，判断能不能装 AI 功能 |
+| 1 | 下载 ffmpeg（约 100 MB） |
+| 2 | 建 `.venv` 并按显卡装对应版本的 PyTorch |
+| 3 | 装依赖（自动测速选最快的 pip 源） |
+| 4 | 下载三套引擎（约 700 MB） |
+| 5 | 下载模型权重（约 9 GB） |
+| 6 | 建子环境 + 应用兼容修补 |
+
+**几个有用的参数**：
+
+```powershell
+python setup.py --check          # 只体检，不改任何东西
+python setup.py --core           # 只装核心（音频工具，不碰 AI）
+python setup.py --step env       # 只跑某一步（失败后重试用）
+python setup.py --yes            # 不交互，全自动
+```
+
+**中途断了怎么办**：重新跑 `python setup.py`，已完成的步骤会跳过。
+想彻底重来，删掉 `logs\setup-state.json`。
+
+---
+
+### 手动方式（想自己控制每一步）
+
+<details>
+<summary>点开看完整手动步骤</summary>
+
+#### 1. 检查显卡和驱动
 
 ```powershell
 nvidia-smi
 ```
 
-能看到显卡型号和 CUDA Version 就正常。如果报错，先装 [NVIDIA 驱动](https://www.nvidia.cn/drivers/)。
-
-**记录你的驱动版本** —— 它决定能用哪个 CUDA 版本：
+**记录驱动版本** —— 它决定能用哪个 CUDA：
 
 | 驱动版本 | 最高 CUDA |
 |---|---|
@@ -89,19 +124,9 @@ nvidia-smi
 | 530 ~ 569 | 12.1 |
 | 520 ~ 529 | 11.8 |
 
-### 2. 装 Python 3.10+
+#### 2. 装 PyTorch
 
-从 [python.org](https://www.python.org/downloads/) 下载安装，
-**安装时务必勾选 `Add Python to PATH`**。
-
-验证：
-```powershell
-python --version
-```
-
-### 3. 装 PyTorch
-
-**50 系显卡**（RTX 5060/5070/5080/5090）：
+**50 系**（RTX 5060/5070/5080/5090）：
 ```powershell
 python -m pip install torch==2.7.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
 ```
@@ -111,49 +136,48 @@ python -m pip install torch==2.7.0 torchaudio==2.7.0 --index-url https://downloa
 python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
-验证 GPU 能用：
+验证：
 ```powershell
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
-应该输出 `True` 和你的显卡型号。
 
-### 4. 建虚拟环境并装依赖
+#### 3. 建环境并装依赖
 
 ```powershell
-cd voiceconv
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\pip install -r requirements.txt --index-url https://mirrors.pku.edu.cn/pypi/simple
 ```
 
-> 依赖装不上时优先换国内源，实测北大镜像（4 秒响应）比官方源（160 秒）快很多：
-> ```powershell
-> .venv\Scripts\pip install -r requirements.txt --index-url https://mirrors.pku.edu.cn/pypi/simple
-> ```
-
-### 5. 下载引擎
-
-三套引擎要分别下载到指定位置：
+#### 4. 下载引擎
 
 ```powershell
-# 变声（Seed-VC）
 git clone https://github.com/Plachtaa/seed-vc src\seed-vc-main
-
-# 朗读（GPT-SoVITS）→ 放到 tools\tts\engine
 git clone https://github.com/RVC-Boss/GPT-SoVITS tools\tts\engine
-
-# RVC → 放到 tools\rvc\engine
 git clone https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI tools\rvc\engine
 ```
 
-### 6. 下载模型权重
-
-约 8 GB。国内直连 HuggingFace 会超时，代码里已经默认走 `hf-mirror.com`。
+#### 5. 下载权重
 
 ```powershell
-.venv\Scripts\python download_models.py        # Seed-VC 权重
-.venv\Scripts\python download_rvc_models.py    # RVC 权重（HuBERT + RMVPE）
-.venv\Scripts\python download_tts_models.py    # GPT-SoVITS 权重
+.venv\Scripts\python download_models.py
+.venv\Scripts\python download_rvc_models.py
+.venv\Scripts\python download_tts_models.py
 ```
+
+#### 6. 建子环境
+
+```powershell
+.venv\Scripts\python -m venv --system-site-packages tools\tts\venv
+.venv\Scripts\python -m venv --system-site-packages tools\rvc\venv
+```
+
+然后把 `.venv\Lib\site-packages` 的路径分别写进：
+```
+tools\tts\venv\Lib\site-packages\_shared_from_voice.pth
+tools\rvc\venv\Lib\site-packages\_shared_from_voice.pth
+```
+
+</details>
 
 ### 7. 启动
 
