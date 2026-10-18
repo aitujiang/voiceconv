@@ -141,7 +141,18 @@ def main() -> int:
     ap.add_argument("--branch", default="main", help="分支（默认 main）")
     ap.add_argument("--check", action="store_true", help="只检查版本，不动文件")
     ap.add_argument("--no-setup", action="store_true", help="更新后不跑 setup.py")
-    args = ap.parse_args()
+    args, extra = ap.parse_known_args()
+    if not args.zip:
+        # 允许把 zip 直接拖到 升级.bat 上：多出来的那个参数就是 zip 路径
+        for item in extra:
+            if item.lower().endswith(".zip"):
+                args.zip = item
+                break
+        else:
+            if extra:
+                say(f"❓ 看不懂这个参数：{extra[0]}")
+                say("   用法：双击 升级.bat，或把下载好的 zip 拖到 升级.bat 上")
+                return 2
 
     cur = read_version(ROOT)
     say("=" * 62)
