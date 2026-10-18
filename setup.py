@@ -358,28 +358,130 @@ def step_deps() -> bool:
 
 # --------------------------------------------------------------------------- #
 # 第 4 步：引擎
+#
+# 为什么不用 git clone
+# --------------------
+# 实测（关掉代理）：
+#     github.com 首页              ✅ 200
+#     github.com/.../archive/zip   ✅ 200   ← 能下
+#     api.github.com               ✅ 200
+#     git clone github.com         ❌ "Failed to connect ... after 21047 ms"
+#
+# 也就是说 **HTTPS 下载能通，git 协议连不上**（大概是 git 的传输层被单独
+# 拦了，或者走了不同的链路）。既然 zip 能下，就用 zip —— 还省了用户装 git。
 # --------------------------------------------------------------------------- #
-def clone(url: str, dest: Path, name: str) -> bool:
-    if dest.exists() and any(dest.iterdir()):
-        say(f"  {name} 已存在，跳过")
+ENGINES = [
+    # (显示名, owner/repo, 下载后的目标目录)
+    ("Seed-VC", "Plachtaa/seed-vc", SRC_SEEDVC),
+    ("GPT-SoVITS", "RVC-Boss/GPT-SoVITS", TTS_ENGINE),
+    ("RVC", "RVC-Project/Retrieval-based-Voice-Conversion-WebUI", RVC_ENGINE),
+]
+
+# zip 下载的三条路，依次尝试
+def engine_zip_urls(slug: str) -> list[str]:
+    return [
+        f"https://github.com/{slug}/archive/refs/heads/main.zip",
+        f"https://github.com/{slug}/archive/refs/heads/master.zip",
+        f"https://ghproxy.net/https://github.com/{slug}/archive/refs/heads/main.zip",
+        f"https://gh-proxy.com/https://github.com/{slug}/archive/refs/heads/main.zip",
+    ]
+
+
+def _download(url: str, dst: Path, label: str = "") -> bool:
+    """下载文件，带进度。返回是否成功。"""
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "voiceconv-setup"})
+        with urllib.request.urlopen(req, timeout=180) as r, open(dst, "wb") as f:
+            total = int(r.headers.get("Content-Length") or 0)
+            got = 0
+            last = 0
+            while True:
+                chunk = r.read(1024 * 512)
+                if not chunk:
+                    break
+                f.write(chunk)
+                got += len(chunk)
+                if total and got - last > 20 * 1024 * 1024:
+                    last = got
+                    say(f"    {got*100//total:3d}%  {got/1e6:.0f}/{total/1e6:.0f} MB")
+        if dst.stat().st_size < 1024:
+            return False
         return True
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    say(f"  clone {name}…")
-    code, out = run(["git", "clone", "--depth", "1", url, str(dest)])
-    if code != 0:
-        say(f"  ❌ {name} 下载失败。可能原因：没装 git / 网络不通")
-        say("     如果 GitHub 连不上，先开代理，或手动下载 zip 解压到该目录")
+    except Exception as exc:                     # noqa: BLE001
+        say(f"    失败：{type(exc).__name__}: {str(exc)[:80]}")
         return False
-    say(f"  ✅ {name}")
-    return True
+
+
+def _extract_zip_to(zip_path: Path, dest: Path) -> bool:
+    """把 GitHub 的 archive zip 解压到 dest。
+
+    GitHub 的 archive 会多套一层目录（如 `seed-vc-main/`），
+    这里把那一层去掉，直接把内容放到 dest 下。
+    """
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            names = z.namelist()
+            if not names:
+                return False
+            # 找出共同的顶层目录
+            tops = {n.split("/")[0] for n in names if n.split("/")[0]}
+            top = tops.pop() if len(tops) == 1 else ""
+            dest.mkdir(parents=True, exist_ok=True)
+            for info in z.infolist():
+                if info.is_dir():
+                    continue
+                name = info.filename
+                if top and name.startswith(top + "/"):
+                    name = name[len(top) + 1:]
+                if not name:
+                    continue
+                out = dest / name
+                out.parent.mkdir(parents=True, exist_ok=True)
+                with z.open(info) as src, open(out, "wb") as f:
+                    shutil.copyfileobj(src, f)
+        return any(dest.iterdir())
+    except Exception as exc:                     # noqa: BLE001
+        say(f"  解压失败：{type(exc).__name__}: {exc}")
+        return False
+
+
+def fetch_engine(name: str, slug: str, dest: Path) -> bool:
+    """下载并解压一个引擎。已存在则跳过。"""
+    if dest.exists() and any(dest.iterdir()):
+        n = sum(1 for _ in dest.rglob("*"))
+        say(f"  {name} 已存在（{n} 项），跳过")
+        return True
+
+    LOGS.mkdir(parents=True, exist_ok=True)
+    zip_path = LOGS / f"engine-{slug.split('/')[-1]}.zip"
+
+    for url in engine_zip_urls(slug):
+        say(f"  {name}：{url.split('/')[2]}…")
+        if _download(url, zip_path):
+            say(f"    下载完成 {zip_path.stat().st_size/1e6:.1f} MB，解压…")
+            if _extract_zip_to(zip_path, dest):
+                zip_path.unlink(missing_ok=True)
+                say(f"  ✅ {name} → {dest.relative_to(ROOT)}")
+                return True
+            say("    解压出来的目录是空的，换下一个源")
+        zip_path.unlink(missing_ok=True)
+
+    say(f"  ❌ {name} 所有源都失败")
+    say(f"     可以手动下载 https://github.com/{slug}/archive/refs/heads/main.zip")
+    say(f"     解压后把里面的内容放到：{dest}")
+    return False
 
 
 def step_engines() -> bool:
-    head("4", "三套引擎（约 700 MB）")
+    head("4", "三套引擎源码（约 700 MB）")
+    say("  用 zip 下载（不需要 git，也不需要代理）")
     ok = True
-    ok &= clone(SEEDVC_REPO, SRC_SEEDVC, "Seed-VC")
-    ok &= clone(TTS_REPO, TTS_ENGINE, "GPT-SoVITS")
-    ok &= clone(RVC_REPO, RVC_ENGINE, "RVC")
+    for name, slug, dest in ENGINES:
+        ok &= fetch_engine(name, slug, dest)
     return ok
 
 
