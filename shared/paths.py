@@ -84,7 +84,7 @@ SANDBOX = ROOT / "io" / "_sandbox"
 # 品牌 / 界面用常量
 # --------------------------------------------------------------------------- #
 APP_NAME = "素材工具箱"
-APP_VERSION = "0.0.1"
+APP_VERSION = "0.0.2"
 
 
 def ensure_dirs() -> None:
