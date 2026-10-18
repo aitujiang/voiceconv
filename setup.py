@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -106,20 +107,58 @@ def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None,
     return r.returncode, out
 
 
-def load_state() -> set[str]:
+def load_state() -> dict:
+    """读安装状态。文件坏了就当空（顶多重跑一遍，不会漏装）。"""
     if MARKER.exists():
         try:
-            return set(json.loads(MARKER.read_text(encoding="utf-8")).get("done", []))
+            data = json.loads(MARKER.read_text(encoding="utf-8-sig"))
+            if isinstance(data, dict):
+                return data
         except Exception:                        # noqa: BLE001
-            return set()
-    return set()
+            return {}
+    return {}
 
 
-def mark_done(step: str) -> None:
+def mark_done(step: str, fp: str | None = None) -> None:
     LOGS.mkdir(parents=True, exist_ok=True)
-    done = load_state()
+    st = load_state()
+    done = set(st.get("done", []))
     done.add(step)
-    MARKER.write_text(json.dumps({"done": sorted(done)}, indent=1), encoding="utf-8")
+    fps = dict(st.get("fp", {}))
+    if fp:
+        fps[step] = fp
+    MARKER.write_text(json.dumps({"done": sorted(done), "fp": fps}, indent=1),
+                      encoding="utf-8")
+
+
+# ---------------------------------------------------------------- 指纹 --
+# 纯代码更新（改界面、修 bug）不该让用户重装环境，所以哪些步骤能跳过，
+# 由「依赖清单有没有变」决定，而不是「是不是做过」。
+# 改动了 6.x 的修补逻辑就 PATCH_REV += 1，让老用户重跑一次。
+PATCH_REV = "1"
+
+
+def _hash(path: Path) -> str:
+    h = hashlib.sha256()
+    if path.exists():
+        h.update(path.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def deps_fp() -> str:
+    return _hash(ROOT / "requirements.txt")
+
+
+def patches_fp() -> str:
+    """三套依赖清单 + 修补逻辑版本。任何一个变了，第 6 步就要重跑。"""
+    h = hashlib.sha256(PATCH_REV.encode())
+    h.update(_hash(TTS_ENGINE / "requirements.txt").encode())
+    for p in pick_rvc_req():
+        h.update(_hash(p).encode())
+    return h.hexdigest()[:16]
+
+
+FP_STEPS = {"deps": deps_fp, "patches": patches_fp}
 
 
 # --------------------------------------------------------------------------- #
@@ -926,15 +965,27 @@ def main() -> int:
             say("已取消")
             return 0
 
-    done = load_state()
+    state = load_state()
+    done = set(state.get("done", []))
+    fps = dict(state.get("fp", {}))
     t0 = time.time()
-    results: dict[str, bool] = {}
+    results: dict[str, object] = {}
 
     for step in plan:
-        if step in done and step != "check":
-            say(f"\n  [{step}] 之前已完成，跳过（删 logs/setup-state.json 可重做）")
-            results[step] = True
-            continue
+        if step != "check" and step in done:
+            fp_fn = FP_STEPS.get(step)
+            if fp_fn is None:
+                say(f"\n  [{step}] 之前已完成，跳过")
+                results[step] = "skip"
+                continue
+            now = fp_fn()
+            if now == fps.get(step):
+                say(f"\n  [{step}] 依赖没变，跳过")
+                results[step] = "skip"
+                continue
+            say(f"\n  [{step}] 依赖有变化，重新执行")
+        else:
+            fp_fn = FP_STEPS.get(step)
 
         if step == "ffmpeg":
             ok = step_ffmpeg()
@@ -953,7 +1004,7 @@ def main() -> int:
 
         results[step] = ok
         if ok:
-            mark_done(step)
+            mark_done(step, fp_fn() if fp_fn else None)
         else:
             say()
             say(f"❌ [{step}] 失败。修好后可以只重跑这一步：")
@@ -965,8 +1016,11 @@ def main() -> int:
     say("=" * 64)
     say(f" 完成，用时 {elapsed:.1f} 分钟")
     say("=" * 64)
-    for step, ok in results.items():
-        say(f"  {'✅' if ok else '❌'} {STEPS[step][0]}")
+    for step, r in results.items():
+        if r == "skip":
+            say(f"  ⏭  {STEPS[step][0]}（已是最新，跳过）")
+        else:
+            say(f"  {'✅' if r else '❌'} {STEPS[step][0]}")
     say()
     say(" 下一步：双击  启动.bat")
     say()

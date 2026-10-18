@@ -63,7 +63,9 @@ TRAINED = DATA / "models"                              # 训练出的模型（RV
 TRAINED_RVC = TRAINED / "rvc"                          # .pth + .index
 TRAINED_SOVITS = TRAINED / "sovits"                    # .ckpt + .pth
 VOICE_DATASETS = DATA / "datasets"                     # 训练素材：data\datasets\<角色名>\*.wav
-SITES_JSON = DATA / "sites.json"                       # 素材网站列表
+SITES_JSON = DATA / "sites.json"                       # 素材网站列表（出厂默认）
+# 用户改过的列表存这里：升级时解压覆盖代码不会碰它（.gitignore 里排除）
+SITES_LOCAL_JSON = DATA / "sites.local.json"
 LINKS_JSON = DATA / "links.json"                       # 外接启动器（用户自己加的外部程序）
 
 IO = ROOT / "io"

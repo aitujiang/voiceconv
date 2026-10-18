@@ -4,7 +4,7 @@
 
 * 左侧按分类列出网站，点一下用默认浏览器打开
 * 可以自己增删（"+" 添加、"−" 删除选中）
-* 数据存在 data\\sites.json，你可以直接编辑，也可以整个拷走备份
+* 数据存在 data/sites.local.json（首次保存时生成），可以直接编辑
 """
 from __future__ import annotations
 
@@ -49,21 +49,24 @@ DEFAULT_SITES: dict[str, list[list[str]]] = {
 
 
 def load_sites() -> dict[str, list[list[str]]]:
-    if not paths.SITES_JSON.exists():
-        save_sites(DEFAULT_SITES)
-        return json.loads(json.dumps(DEFAULT_SITES))
-    try:
-        data = json.loads(paths.SITES_JSON.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            return data
-    except Exception:                                  # noqa: BLE001
-        pass
+    """读网站列表。用户改过的 sites.local.json 优先，其次出厂默认 sites.json。"""
+    for p in (paths.SITES_LOCAL_JSON, paths.SITES_JSON):
+        if not p.exists():
+            continue
+        try:
+            data = json.loads(p.read_text(encoding="utf-8-sig"))
+            if isinstance(data, dict):
+                return data
+        except Exception:                              # noqa: BLE001
+            continue
+    save_sites(DEFAULT_SITES)
     return json.loads(json.dumps(DEFAULT_SITES))
 
 
 def save_sites(data: dict[str, list[list[str]]]) -> None:
-    paths.SITES_JSON.parent.mkdir(parents=True, exist_ok=True)
-    paths.SITES_JSON.write_text(
+    """改动一律写 sites.local.json —— 升级覆盖代码时这个文件不会被动。"""
+    paths.SITES_LOCAL_JSON.parent.mkdir(parents=True, exist_ok=True)
+    paths.SITES_LOCAL_JSON.write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

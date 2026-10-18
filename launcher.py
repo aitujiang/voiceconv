@@ -152,7 +152,7 @@ TOOL_DETAIL: dict[str, list[str]] = {
     "sites": [
         "把常用素材站的链接收在一个窗口里",
         "点一下就打开浏览器",
-        "可以自己增删，列表存在 data\\sites.json",
+        "可以自己增删，列表存在 data\\sites.local.json",
     ],
     "voices": [
         "第一层 素材库：你下载的原始配音文件",

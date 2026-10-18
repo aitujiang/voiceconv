@@ -208,6 +208,22 @@ tools\rvc\venv\Lib\site-packages\_shared_from_voice.pth
 
 ---
 
+## 升级到新版本
+
+解压新版本覆盖到**原目录**（不要解压到新文件夹，也别让它变成
+`voiceconv-main\voiceconv-main\`），然后：
+
+```powershell
+python setup.py
+```
+
+- 代码被替换，`.venv` / 引擎 / 权重 / 你的成品都不动
+- 依赖没变 → 直接跳过（0 秒）；依赖变了 → 自动重装，不用你记命令
+- 你改过的素材网站列表在 `data\sites.local.json`，不会被覆盖
+- 升级前**先退出工具箱**，否则文件被占用会解压失败
+
+---
+
 ## 只想要音频工具？
 
 如果只用「音频提取 / 响度标准化 / 素材网站」这三个，
