@@ -70,9 +70,31 @@ def head(step: str, title: str) -> None:
 
 def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None,
         check: bool = True) -> tuple[int, str]:
-    """跑命令并返回 (退出码, 输出)。"""
+    """跑命令并返回 (退出码, 输出)。
+
+    所有缓存目录一律指到项目内：用户目录下的 pip / matplotlib / HF 缓存
+    在没管理员权限的机器上常常不可写（WinError 5），会把正常安装搞失败。
+    """
+    e = dict(os.environ)
+    e.update({
+        "PIP_CACHE_DIR": str(LOGS / "pipcache"),
+        "MPLCONFIGDIR": str(LOGS / "mplconfig"),
+        "HF_HOME": str(ROOT / "models" / "hfcache"),
+        "TORCH_HOME": str(ROOT / "models" / "torch"),
+        "HF_HUB_DISABLE_TELEMETRY": "1",
+        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+        "PYTHONIOENCODING": "utf-8",
+    })
+    e.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+    if env:
+        e.update(env)
+    for d in ("PIP_CACHE_DIR", "MPLCONFIGDIR", "HF_HOME", "TORCH_HOME"):
+        try:
+            Path(e[d]).mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
     try:
-        r = subprocess.run(cmd, cwd=str(cwd or ROOT), env=env,
+        r = subprocess.run(cmd, cwd=str(cwd or ROOT), env=e,
                            capture_output=True, text=True, encoding="utf-8",
                            errors="replace", creationflags=NO_WINDOW)
     except OSError as exc:
@@ -145,7 +167,10 @@ def probe_gpu() -> dict:
 
 def probe_python() -> tuple[bool, str]:
     v = sys.version_info
-    ok = v >= (3, 10)
+    # 只认 3.10 ~ 3.12。整套 AI 依赖（torch cu128 / funasr / pymss / opencc …）
+    # 只在 3.12 上验证过；3.13 起 funasr、pymss 等还没有 Windows wheel，
+    # 装上也是残的。宁可现在拦住，也别让用户装到一半才炸。
+    ok = (3, 10) <= v < (3, 13)
     return ok, f"{v.major}.{v.minor}.{v.micro}"
 
 
@@ -163,7 +188,12 @@ def step_check() -> bool:
     py_ok, py_ver = probe_python()
     free_gb, total_gb = probe_disk()
 
-    say(f"  Python      : {py_ver}  {'OK' if py_ok else '❌ 需要 3.10+'}")
+    say(f"  Python      : {py_ver}  {'OK' if py_ok else '❌ 需要 3.10 ~ 3.12'}")
+    if not py_ok:
+        say("                  → 请装 Python 3.12（python.org，64 位），")
+        say("                    3.13+ 上 funasr / pymss 等依赖还没有 Windows wheel")
+    elif not py_ver.startswith("3.12"):
+        say("                  ⚠️ 只在 3.12 上完整验证过，建议换 3.12")
     if gpu["ok"]:
         say(f"  显卡        : {gpu['name']}")
         say(f"  显存        : {gpu['vram_mb']} MB  ({gpu['vram_mb']/1024:.1f} GB)")
@@ -323,7 +353,7 @@ def pick_mirror() -> str:
     for name, url in PIP_MIRRORS:
         t0 = time.time()
         try:
-            urllib.request.urlopen(url, timeout=8).read(1)
+            urllib.request.urlopen(url.rstrip("/") + "/", timeout=8).read(1)
             ms = (time.time() - t0) * 1000
             say(f"    {name:5} {ms:6.0f} ms")
             if ms < best_ms:
@@ -458,6 +488,7 @@ def fetch_engine(name: str, slug: str, dest: Path) -> bool:
 
     LOGS.mkdir(parents=True, exist_ok=True)
     zip_path = LOGS / f"engine-{slug.split('/')[-1]}.zip"
+    zip_path.unlink(missing_ok=True)          # 上次被打断留下的半截包
 
     for url in engine_zip_urls(slug):
         say(f"  {name}：{url.split('/')[2]}…")
@@ -522,18 +553,204 @@ def make_subenv(path: Path, name: str) -> bool:
     """从 .venv 派生子环境：共用 torch，但自己装的包不污染回去。"""
     if (path / "Scripts" / "python.exe").exists():
         say(f"  {name} 已存在")
-        return True
-    say(f"  创建 {name}（复用 .venv 的 torch）…")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    code, out = run([str(VENV_PY), "-m", "venv", "--system-site-packages",
-                     str(path)])
-    if code != 0:
-        say(f"  ❌ {name} 创建失败")
-        return False
-    # 用 .pth 把 .venv 的 site-packages 暴露给它
+    else:
+        say(f"  创建 {name}（复用 .venv 的 torch）…")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        code, out = run([str(VENV_PY), "-m", "venv", "--system-site-packages",
+                         str(path)])
+        if code != 0:
+            say(f"  ❌ {name} 创建失败")
+            return False
+    # 用 .pth 把 .venv 的 site-packages 暴露给它。
+    # 每次启动都补写：目录被误删/搬动后，这里能自愈。
     pth = path / "Lib" / "site-packages" / "_shared_from_voice.pth"
-    pth.parent.mkdir(parents=True, exist_ok=True)
-    pth.write_text(str(VENV / "Lib" / "site-packages") + "\n", encoding="utf-8")
+    target = str(VENV / "Lib" / "site-packages")
+    if not pth.exists() or pth.read_text(encoding="utf-8", errors="ignore").strip() != target:
+        pth.parent.mkdir(parents=True, exist_ok=True)
+        pth.write_text(target + "\n", encoding="utf-8")
+        say(f"  ✅ {name}: 指向 .venv 的 .pth")
+    return True
+
+
+# --------------------------------------------------------------------------- #
+# 引擎依赖：以内核自带的 requirements 为准
+#
+# 以前这里是手抄的包名清单，漏了 GPT-SoVITS 的文本前端（g2p_en / opencc /
+# split_lang / funasr / ToJyutping …）和 RVC 的 MSST 音高后端（pymss /
+# torchfcpe）。本机因为当年是手工照引擎文件装的，所以看不出来；用户从零
+# 装完，朗读和 RVC 会 ImportError。现在直接读引擎自己那份。
+# --------------------------------------------------------------------------- #
+
+# 这些不装：torch 由 .venv 共用；jieba_fast / pyopenjtalk 没有 Windows
+# wheel，6.4 会用纯 Python 转发顶上。
+SKIP_DEPS = {
+    "torch", "torchaudio", "torchvision", "triton",
+    "jieba_fast", "pyopenjtalk", "pyopenjtalk_plus",
+}
+
+# 装完做一次 import 验证 —— 这些都是引擎真正会 import 到的东西
+# modelscope 不进去：引擎运行时不 import 它（权重走 HTTP 下），而它的
+# 依赖 oss2 / crcmod 要本地编译，用户没装 VS 编译器的机器上装不动。
+TTS_VERIFY = ["transformers", "torch", "torchaudio", "funasr", "ctranslate2",
+              "sentencepiece", "g2p_en", "opencc", "split_lang",
+              "fast_langdetect", "x_transformers", "torchmetrics", "jieba"]
+RVC_VERIFY = ["transformers", "torch", "pymss", "pymss_core", "torchfcpe",
+              "sounddevice", "sklearn", "coloredlogs", "local_attention",
+              "faiss", "torchcrepe", "gradio"]
+
+# import 名和包名不一样的那几个（重试时要用）
+MODULE_ALIAS = {"yaml": "pyyaml", "faiss": "faiss_cpu", "sklearn": "scikit_learn",
+                "cv2": "opencv_python_headless", "pil": "pillow", "attr": "attrs"}
+
+# 这几个包的依赖声明会把共用的 torch 顶掉（pymss 要 torch>=2.7.1，而
+# .venv 里是 2.7.0+cu128）。所以它们单独用 --no-deps 装：功能只要 torch
+# 在就行，不能让 pip 去重装 torch（那是 5.4 GB，而且大概率换成 CPU 版）。
+NO_DEPS_PKGS = {"pymss", "pymss_core"}
+
+
+def torch_constraint() -> Path | None:
+    """写一份 constraints，把 torch/torchaudio 钉在已装版本上。"""
+    code = ("import torch, torchaudio\n"
+            "print(torch.__version__.split('+')[0], "
+            "torchaudio.__version__.split('+')[0])\n")
+    _, out = run([str(VENV_PY), "-c", code], check=False)
+    lines = [ln.strip() for ln in out.strip().splitlines() if ln.strip()]
+    if not lines or len(lines[-1].split()) != 2:
+        return None
+    tv, av = lines[-1].split()
+    path = LOGS / "constraints.txt"
+    path.write_text(f"torch=={tv}\ntorchaudio=={av}\n", encoding="utf-8")
+    return path
+
+
+def pkg_name(line: str) -> str:
+    """从一行 requirement 里抽出规范化的包名。"""
+    return (re.split(r"[\s\[<>=!~;]", line, 1)[0]
+            .lower().replace("-", "_").replace(".", "_"))
+
+
+def req_lines(path: Path) -> list[str]:
+    """读 requirements 文件：去掉注释、pip 选项行（--index-url 等）和禁用包。"""
+    out: list[str] = []
+    for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line or line.startswith("-"):
+            continue
+        if pkg_name(line) in SKIP_DEPS:
+            continue
+        out.append(line)
+    return out
+
+
+def venv_import(venv: Path, mods: list[str]) -> list[str]:
+    """在指定环境里逐个 import，返回失败的模块名。
+
+    用一个哨兵前缀认自己的输出 —— 子进程会混进 pip / matplotlib 的
+    警告，不能直接取最后一行。
+    """
+    code = ("import importlib, sys\n"
+            "bad = []\n"
+            "for m in sys.argv[1:]:\n"
+            "    try:\n"
+            "        importlib.import_module(m)\n"
+            "    except Exception:\n"
+            "        bad.append(m)\n"
+            "print('__BAD__' + '|'.join(bad))\n")
+    _, out = run([str(venv / "Scripts" / "python.exe"), "-c", code, *mods],
+                 check=False)
+    for line in reversed(out.splitlines()):
+        if line.strip().startswith("__BAD__"):
+            return [x for x in line.strip()[len("__BAD__"):].split("|") if x]
+    return mods
+
+
+def pick_rvc_req() -> list[Path]:
+    """RVC 仓库按 (CUDA, Python) 分文件，挑和本机匹配的那份。"""
+    gpu = probe_gpu()
+    cuda = {"12.8": "cu128", "12.1": "cu118", "11.8": "cu118"}.get(
+        gpu["cuda_max"], "cu118")
+    v = sys.version_info
+    py = f"py{v.major}{v.minor}"
+    cands = [RVC_ENGINE / f"requirments_{cuda}_{py}.txt",
+             RVC_ENGINE / f"requirments_{cuda}_py312.txt",
+             RVC_ENGINE / f"requirments_cpu_{py}.txt",
+             RVC_ENGINE / "requirements.txt"]
+    out: list[Path] = []
+    for p in cands:
+        if p.exists() and p not in out:
+            out.append(p)
+    return out
+
+
+def install_engine_deps(venv: Path, label: str, req_files: list[Path],
+                        verify: list[str], mirror: str) -> bool:
+    """装一个子环境的依赖：整批装 → 验 import → 缺的单个重试 → 再验。"""
+    pkgs: list[str] = []
+    for req in req_files:
+        if req.exists():
+            got = req_lines(req)
+            say(f"    {req.name}：{len(got)} 项")
+            pkgs += got
+        else:
+            say(f"    ⬜ 没找到 {req.name}，跳过")
+    if not pkgs:
+        say(f"  ❌ {label}：引擎依赖清单是空的（引擎没下全？）")
+        return False
+
+    LOGS.mkdir(parents=True, exist_ok=True)
+    tmp = LOGS / f"req-{label}.txt"
+    tmp.write_text("\n".join(pkgs) + "\n", encoding="utf-8")
+
+    py = str(venv / "Scripts" / "python.exe")
+    say(f"  装 {label} 依赖（{len(pkgs)} 项，几分钟）…")
+
+    # 会顶掉共用 torch 的先单独装（理由见 NO_DEPS_PKGS）
+    solo = [p for p in pkgs if pkg_name(p) in NO_DEPS_PKGS]
+    for one in solo:
+        run([py, "-m", "pip", "install", "--progress-bar", "off", "--no-input",
+             "--no-deps", one, "--index-url", mirror], check=False)
+    rest = [p for p in pkgs if pkg_name(p) not in NO_DEPS_PKGS]
+    tmp.write_text("\n".join(rest) + "\n", encoding="utf-8")
+
+    # constraints 钉住 torch —— 防止被引擎依赖顺带升级成别的版本
+    con = torch_constraint()
+    extra = ["--constraint", str(con)] if con else []
+
+    code, _ = run([py, "-m", "pip", "install", "--progress-bar", "off",
+                   "--no-input", "-r", str(tmp), "--index-url", mirror, *extra])
+    if code != 0:
+        # 常见两类失败：① .venv 里躺着一个不该在的包（如 torch-directml）
+        # 把依赖解算搞成 ResolutionImpossible；② 某个包没有现成 wheel。
+        # 退一步：不让 pip 解依赖，先装进去，后面用 import 验证兜底。
+        say("    整批装没过，改用 --no-deps 再试一次…")
+        run([py, "-m", "pip", "install", "--progress-bar", "off",
+             "--no-input", "--no-deps", "-r", str(tmp), "--index-url", mirror,
+             *extra])
+
+    bad = venv_import(venv, verify)
+    if bad:
+        say(f"    缺 {len(bad)} 个：{', '.join(bad)}，按单个包重试")
+        want = {MODULE_ALIAS.get(b, b) for b in bad}
+        retry = [p for p in pkgs if pkg_name(p) in want]
+        for one in retry:
+            c, _ = run([py, "-m", "pip", "install", "--progress-bar", "off",
+                        "--no-input", one, "--index-url", mirror, *extra],
+                       check=False)
+            if c != 0:
+                run([py, "-m", "pip", "install", "--progress-bar", "off",
+                     "--no-input", "--no-deps", one, "--index-url", mirror],
+                    check=False)
+        if "opencc" in bad:          # 没编译环境时退回纯 Python 实现
+            run([py, "-m", "pip", "install", "--progress-bar", "off",
+                 "--no-input", "opencc-python-reimplemented",
+                 "--index-url", mirror], check=False)
+        bad = venv_import(venv, verify)
+
+    if bad:
+        say(f"  ❌ {label} 依赖仍缺：{', '.join(bad)}")
+        say(f"     手动补：{venv.name} 环境里 pip install <包名>")
+        return False
+    say(f"  ✅ {label} 依赖齐全（{len(verify)} 个关键 import 全过）")
     return True
 
 
@@ -570,16 +787,12 @@ def step_patches(quick: bool = False) -> bool:
     if quick:
         return ok
 
-    # --- 6.3 GPT-SoVITS 的依赖 ---
-    say("  装 GPT-SoVITS 依赖（transformers 4.57 等）…")
-    code, out = run([str(TTS_VENV / "Scripts" / "python.exe"), "-m", "pip", "install",
-                     "--progress-bar", "off", "-q",
-                     "transformers==4.57.0", "gradio>=4,<5", "onnxruntime",
-                     "jieba", "pypinyin", "cn2an", "wordsegment",
-                     "pyopenjtalk-plus", "ffmpeg-python", "tensorboard",
-                     "pytorch-lightning", "peft", "numpy==1.26.4"])
-    if code != 0:
-        say("  ⚠️ 部分包失败，继续（有些是可选的）")
+    # --- 6.3 GPT-SoVITS 的依赖（吃引擎自带的 requirements.txt） ---
+    say()
+    mirror = pick_mirror()
+    ok &= install_engine_deps(TTS_VENV, "朗读",
+                              [TTS_ENGINE / "requirements.txt"],
+                              TTS_VERIFY, mirror)
 
     # --- 6.4 jieba_fast shim（没有 Windows wheel，用 jieba 顶上） ---
     for venv in (TTS_VENV,):
@@ -626,19 +839,10 @@ def step_patches(quick: bool = False) -> bool:
                 encoding="utf-8")
             say("  ✅ pyopenjtalk stub（日语不可用，中英文正常）")
 
-    # --- 6.5 RVC 环境依赖 ---
-    say("  装 RVC 依赖…")
-    code, out = run([str(RVC_VENV / "Scripts" / "python.exe"), "-m", "pip", "install",
-                     "--progress-bar", "off", "-q",
-                     "transformers>=4.49,<4.50", "gradio>=3.14,<3.15",
-                     "pydantic>=1.10,<2", "fastapi>=0.88,<0.100",
-                     "starlette>=0.22,<0.28", "uvicorn>=0.20,<0.23",
-                     "faiss-cpu", "praat-parselmouth", "torchcrepe",
-                     "local-attention", "einops", "onnxruntime-gpu>=1.19,<1.20",
-                     "opencv-python-headless", "av", "FreeSimpleGUI",
-                     "librosa>=0.10.2,<0.11", "numpy==1.26.4"])
-    if code != 0:
-        say("  ⚠️ 部分包失败，继续")
+    # --- 6.5 RVC 环境依赖（吃引擎自带的 requirments_<cuda>_py<ver>.txt） ---
+    say()
+    ok &= install_engine_deps(RVC_VENV, "RVC", pick_rvc_req(),
+                              RVC_VERIFY, mirror)
 
     # --- 6.6 ffmpeg shim（RVC 的 my_utils.py 硬编码 cmd=[\"ffmpeg\"]） ---
     shim = LOGS / "bin-shim"

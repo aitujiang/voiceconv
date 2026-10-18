@@ -57,7 +57,7 @@
 | 系统 | Windows 10 / 11，64 位 |
 | 显卡 | **NVIDIA**，建议 8 GB 显存以上 |
 | 磁盘 | 约 20 GB（含引擎和模型） |
-| Python | 3.10+ |
+| Python | **3.12**（64 位）· 3.10 / 3.11 也可以 |
 | 内存 | 16 GB 建议 |
 
 ### ⚠️ 关于显卡
@@ -66,6 +66,18 @@
 - **RTX 50 系**（Blackwell / sm_120）需要 PyTorch 2.7+ 且带 cu128 内核。
   低版本 PyTorch 在这代卡上**装不上或跑不起来**。
 - 显存小于 6 GB 时，训练类功能会很紧张。
+
+### ⚠️ 关于 Python 版本
+
+**请用 Python 3.12（64 位）**。
+
+- 3.10 / 3.11 也能跑。
+- **3.13 不行**：`funasr`、`pymss`、`opencc` 这些依赖还没有 3.13 的 Windows
+  wheel，会装到一半失败。`setup.py` 在体检那一步就会拦住并提示。
+- 机器上有多个 Python 时，用 `py -3.12 setup.py` 指定版本。
+
+装 Python 时**务必勾选 `Add Python to PATH`**，装完敲 `python -V` 确认。
+
 
 ---
 
@@ -89,7 +101,7 @@ python setup.py
 | 3 | 装依赖（自动测速选最快的 pip 源） |
 | 4 | 下载三套引擎（约 700 MB） |
 | 5 | 下载模型权重（约 9 GB） |
-| 6 | 建子环境 + 应用兼容修补 |
+| 6 | 建子环境 + 装各引擎自己的依赖 + 应用兼容修补 |
 
 **几个有用的参数**：
 
@@ -150,10 +162,19 @@ python -m venv .venv
 
 #### 4. 下载引擎
 
+**用 zip，不要 git clone** —— `git clone github.com` 在国内经常连不上，
+而 zip 能下（这也是 `setup.py` 的做法）：
+
 ```powershell
-git clone https://github.com/Plachtaa/seed-vc src\seed-vc-main
-git clone https://github.com/RVC-Boss/GPT-SoVITS tools\tts\engine
-git clone https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI tools\rvc\engine
+# 三个 zip，浏览器直接下：
+#   https://github.com/Plachtaa/seed-vc/archive/refs/heads/main.zip
+#   https://github.com/RVC-Boss/GPT-SoVITS/archive/refs/heads/main.zip
+#   https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI/archive/refs/heads/main.zip
+#
+# 解压后**去掉最外层那个 repo-main 目录**，把里面的内容放进：
+#   src\seed-vc-main
+#   tools\tts\engine
+#   tools\rvc\engine
 ```
 
 #### 5. 下载权重
