@@ -583,8 +583,12 @@ def make_subenv(path: Path, name: str) -> bool:
 
 # 这些不装：torch 由 .venv 共用；jieba_fast / pyopenjtalk 没有 Windows
 # wheel，6.4 会用纯 Python 转发顶上。
+# torch-directml 也要滤掉 —— RVC 的 requirements 在 Windows 上会拉它，
+# 而它钉死 torch==2.4.1，跟 50 系必需的 torch 2.7+cu128 直接冲突
+# （DirectML 是 AMD 用的，本工具箱不支持 AMD）。
 SKIP_DEPS = {
-    "torch", "torchaudio", "torchvision", "triton",
+    "torch", "torchaudio", "torchvision", "triton", "torch_directml",
+    "onnxruntime_directml",
     "jieba_fast", "pyopenjtalk", "pyopenjtalk_plus",
 }
 
@@ -665,21 +669,22 @@ def venv_import(venv: Path, mods: list[str]) -> list[str]:
 
 
 def pick_rvc_req() -> list[Path]:
-    """RVC 仓库按 (CUDA, Python) 分文件，挑和本机匹配的那份。"""
+    """RVC 仓库按 (CUDA, Python) 分了多个文件，只取**最匹配的那一份**。
+
+    取多了会把 CUDA 版和 CPU 版的包混着装，onnxruntime 之类会被互相覆盖。
+    """
     gpu = probe_gpu()
     cuda = {"12.8": "cu128", "12.1": "cu118", "11.8": "cu118"}.get(
         gpu["cuda_max"], "cu118")
     v = sys.version_info
     py = f"py{v.major}{v.minor}"
-    cands = [RVC_ENGINE / f"requirments_{cuda}_{py}.txt",
-             RVC_ENGINE / f"requirments_{cuda}_py312.txt",
-             RVC_ENGINE / f"requirments_cpu_{py}.txt",
-             RVC_ENGINE / "requirements.txt"]
-    out: list[Path] = []
-    for p in cands:
-        if p.exists() and p not in out:
-            out.append(p)
-    return out
+    for p in (RVC_ENGINE / f"requirments_{cuda}_{py}.txt",
+              RVC_ENGINE / f"requirments_{cuda}_py312.txt",
+              RVC_ENGINE / f"requirments_cpu_{py}.txt",
+              RVC_ENGINE / "requirements.txt"):
+        if p.exists():
+            return [p]
+    return []
 
 
 def install_engine_deps(venv: Path, label: str, req_files: list[Path],
@@ -704,11 +709,10 @@ def install_engine_deps(venv: Path, label: str, req_files: list[Path],
     py = str(venv / "Scripts" / "python.exe")
     say(f"  装 {label} 依赖（{len(pkgs)} 项，几分钟）…")
 
-    # 会顶掉共用 torch 的先单独装（理由见 NO_DEPS_PKGS）
+    # 会顶掉共用 torch 的那几个放到最后单独装（理由见 NO_DEPS_PKGS）。
+    # 顺序很重要：先装它们，pip 解算时会拿它们声明的 torch>=2.7.1 去和
+    # 约束里的 2.7.0 打架，整批就装不动了。
     solo = [p for p in pkgs if pkg_name(p) in NO_DEPS_PKGS]
-    for one in solo:
-        run([py, "-m", "pip", "install", "--progress-bar", "off", "--no-input",
-             "--no-deps", one, "--index-url", mirror], check=False)
     rest = [p for p in pkgs if pkg_name(p) not in NO_DEPS_PKGS]
     tmp.write_text("\n".join(rest) + "\n", encoding="utf-8")
 
@@ -719,13 +723,17 @@ def install_engine_deps(venv: Path, label: str, req_files: list[Path],
     code, _ = run([py, "-m", "pip", "install", "--progress-bar", "off",
                    "--no-input", "-r", str(tmp), "--index-url", mirror, *extra])
     if code != 0:
-        # 常见两类失败：① .venv 里躺着一个不该在的包（如 torch-directml）
+        # 常见两类失败：① 环境里躺着一个不该在的包（如 torch-directml）
         # 把依赖解算搞成 ResolutionImpossible；② 某个包没有现成 wheel。
         # 退一步：不让 pip 解依赖，先装进去，后面用 import 验证兜底。
         say("    整批装没过，改用 --no-deps 再试一次…")
         run([py, "-m", "pip", "install", "--progress-bar", "off",
              "--no-input", "--no-deps", "-r", str(tmp), "--index-url", mirror,
              *extra])
+
+    for one in solo:
+        run([py, "-m", "pip", "install", "--progress-bar", "off", "--no-input",
+             "--no-deps", one, "--index-url", mirror], check=False)
 
     bad = venv_import(venv, verify)
     if bad:
