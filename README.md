@@ -85,7 +85,12 @@
 
 ### 快速方式（推荐）
 
-装好 Python 3.10+ 之后，在项目目录里跑：
+装好 **Python 3.12** 之后，解压本仓库，**双击 `安装.bat`** 即可。
+
+它会自己挑解释器（优先已有的 `.venv`，其次 `py -3.12`，最后 PATH 上的
+`python`），然后跑完整的安装流程。
+
+等价的手工命令（想看到全部参数时用）：
 
 ```powershell
 python setup.py
@@ -279,6 +284,7 @@ tools\rvc\venv\Lib\site-packages\_shared_from_voice.pth
 ```
 voiceconv\
 ├── 启动.bat                  入口
+├── 安装.bat                  一键安装（挑解释器 + 跑 setup.py）
 ├── 升级.bat                  一键更新（取最新代码 + 跑 setup.py）
 ├── update.py                 更新逻辑
 ├── launcher.py               工具箱主界面
