@@ -210,17 +210,22 @@ tools\rvc\venv\Lib\site-packages\_shared_from_voice.pth
 
 ## 升级到新版本
 
-解压新版本覆盖到**原目录**（不要解压到新文件夹，也别让它变成
-`voiceconv-main\voiceconv-main\`），然后：
+**一键更新（推荐）**：先退出工具箱，然后双击 **`升级.bat`**。
 
-```powershell
-python setup.py
-```
+它自动完成：从 GitHub 取最新代码 → 只覆盖代码文件（旧文件先备份到
+`logs\code-backup\`）→ 跑一遍 `setup.py`，只装变化了的部分。你不用选目录、
+也不用担心多出一层文件夹。
 
-- 代码被替换，`.venv` / 引擎 / 权重 / 你的成品都不动
-- 依赖没变 → 直接跳过（0 秒）；依赖变了 → 自动重装，不用你记命令
-- 你改过的素材网站列表在 `data\sites.local.json`，不会被覆盖
-- 升级前**先退出工具箱**，否则文件被占用会解压失败
+- 只想看看有没有新版：`python update.py --check`
+- GitHub 连不上：自己下 zip，然后 `python update.py --zip 路径\voiceconv-main.zip`
+
+**手动方式**（不用脚本）：解压新版本到临时目录，进入里面的
+`voiceconv-main\`，全选复制，粘到**原来 `启动.bat` 所在的那一层**，
+弹窗选「替换目标中的文件」。注意别让目录里多出一层 `voiceconv-main\`。
+
+两种方式都只动代码：`.venv` / 引擎 / 权重 / 你的成品 / 音色预设都不动。
+素材网站列表存在 `data\sites.local.json`，也不会被覆盖。
+升级前**先退出工具箱**，否则文件被占用会失败。
 
 ---
 
@@ -274,6 +279,8 @@ python setup.py
 ```
 voiceconv\
 ├── 启动.bat                  入口
+├── 升级.bat                  一键更新（取最新代码 + 跑 setup.py）
+├── update.py                 更新逻辑
 ├── launcher.py               工具箱主界面
 ├── oneclick.py               AI 变声
 ├── convert.py                单条变声（命令行）
