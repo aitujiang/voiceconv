@@ -183,10 +183,46 @@ class App:
         self._tick_vram()
 
     def _on_source_change(self) -> None:
-        if self.voice_source.get() == preset_store.VOICE_TRAINED:
-            self.ref = None
-            self._refresh_ref()
+        # 训练模型同样需要一段参考音频（模型定音色，参考定语气），所以不清 ref
         self._render_presets()
+
+    def _scan_trained(self) -> list[tuple[Path, Path]]:
+        """扫 data\\models\\sovits 下的 .ckpt，给每个找同目录的 .pth 配对。"""
+        root = paths.TRAINED_SOVITS
+        found: list[tuple[Path, Path]] = []
+        if root.is_dir():
+            for ck in sorted(root.rglob("*.ckpt")):
+                pths = sorted(ck.parent.glob("*.pth"))
+                if not pths:
+                    continue
+                key = ck.stem.split("-")[0].split("_")[0]
+                pick = pths[0]
+                for p in pths:
+                    if p.stem.startswith(key):
+                        pick = p
+                        break
+                found.append((ck, pick))
+        return found
+
+    def _use_trained(self, ck: Path, pth: Path) -> None:
+        self.trained_model = (ck, pth)
+        self.status.config(text=f"已选模型：{ck.name} + {pth.name}", fg=theme.OK)
+        self._render_presets()
+
+    def _pick_trained(self) -> None:
+        f = filedialog.askopenfilename(
+            title="选 GPT 阶段权重（.ckpt）", initialdir=str(paths.TRAINED_SOVITS),
+            filetypes=[("GPT-SoVITS GPT 权重", "*.ckpt"), ("所有文件", "*.*")])
+        if not f:
+            return
+        ck = Path(f)
+        pths = sorted(ck.parent.glob("*.pth"))
+        if not pths:
+            messagebox.showwarning(
+                "缺少 SoVITS 权重",
+                "同目录下没有 .pth 文件。\nGPT-SoVITS 需要 .ckpt 和 .pth 成对才能用。")
+            return
+        self._use_trained(ck, pths[0])
 
     def _render_presets(self) -> None:
         for w in self.preset_box.winfo_children():
@@ -194,35 +230,39 @@ class App:
 
         src = self.voice_source.get()
 
-        # ---- 「用训练模型」这一档：训练功能还没做，给清楚的要求说明 ----
+        # ---- 「用训练模型」这一档：扫描 data\models\sovits 下的角色模型 ----
         if src == preset_store.VOICE_TRAINED:
-            spec = training_spec.SOVITS
             box = tk.Frame(self.preset_box, bg=theme.CARD)
             box.pack(fill="x", padx=12, pady=10)
 
-            tk.Label(box, text="🧠 用训练模型 —— 训练功能尚未开发",
-                     bg=theme.CARD, fg="#ffb454", font=theme.F_CARD).pack(anchor="w")
+            tk.Label(box, text="🧠 用训练模型 —— 选一个角色的 .ckpt + .pth",
+                     bg=theme.CARD, fg=theme.ACCENT, font=theme.F_CARD).pack(anchor="w")
             tk.Label(box,
-                     text="训练出的模型比零样本更像本人，而且每次朗读不用再给参考音频。\n"
-                          "但需要先用同一个角色的素材训练一个模型。",
+                     text="把别人训练好的 GPT-SoVITS 模型放进 "
+                          "data\\models\\sovits\\<角色名>\\ 就会出现在下面。\n"
+                          "仍然需要一段 5~10 秒参考音频（模型决定音色，参考决定语气）。",
                      bg=theme.CARD, fg=theme.MUTED, font=theme.F_SMALL,
                      justify="left").pack(anchor="w", pady=(4, 8))
 
-            for text, colour in (
-                (f"素材时长　最低 {spec.min_minutes:.0f} 分钟，"
-                 f"{spec.good_minutes:.0f} 分钟以上效果明显更好", theme.FG),
-                ("素材质量　必须是干净人声（有 BGM/音效要先分离）"
-                 if spec.clean_required else "素材质量　建议干净", theme.FG),
-                (f"训练耗时　{spec.time_note}", theme.MUTED),
-                (f"运行环境　{spec.env_note}",
-                 theme.MUTED if spec.env_ready else "#ffb454"),
-                (f"产出文件　{' + '.join(spec.outputs)}", theme.MUTED),
-            ):
-                tk.Label(box, text=text, bg=theme.CARD, fg=colour,
-                         font=theme.F_SMALL, justify="left").pack(anchor="w", pady=1)
+            models = self._scan_trained()
+            if not models:
+                tk.Label(box, text="（还没找到模型）", bg=theme.CARD,
+                         fg=theme.DIM, font=theme.F_SMALL).pack(anchor="w")
+            for ck, pth in models[:8]:
+                name = f"{ck.parent.name} · {ck.stem}"
+                tk.Button(box, text=f"🎭 {name}",
+                          command=lambda a=ck, b=pth: self._use_trained(a, b),
+                          bg="#1c3a52", fg="#7fd1ff", activebackground="#244a68",
+                          font=theme.F_SMALL, relief="flat", bd=0, cursor="hand2",
+                          padx=10, pady=4).pack(anchor="w", pady=(0, 4))
 
-            theme.button(box, "看完整素材要求", self.show_training_requirements,
+            theme.button(box, "浏览…（手动选 .ckpt）", self._pick_trained,
                          small=True).pack(anchor="w", pady=(8, 0))
+            cur = getattr(self, "trained_model", None)
+            if cur:
+                tk.Label(box, text=f"当前：{Path(cur[0]).name} + {Path(cur[1]).name}",
+                         bg=theme.CARD, fg=theme.OK, font=theme.F_SMALL).pack(
+                    anchor="w", pady=(6, 0))
             return
 
         # ---- 「用音频」这一档 ----
@@ -336,6 +376,8 @@ class App:
             "out": str(out),
             "speed": float(self.speed.get()),
             "lang": self.lang.get(),
+            "t2s": str(self.trained_model[0]) if getattr(self, "trained_model", None) else "",
+            "vits": str(self.trained_model[1]) if getattr(self, "trained_model", None) else "",
         }
         threading.Thread(target=self._worker, args=(job,), daemon=True).start()
 
@@ -343,6 +385,8 @@ class App:
         cmd = [str(TTS_PY), str(WORKER),
                "--text", job["text"], "--ref", job["ref"], "--out", job["out"],
                "--speed", str(job["speed"]), "--lang", job["lang"]]
+        if job.get("t2s") and job.get("vits"):
+            cmd += ["--t2s", job["t2s"], "--vits", job["vits"]]
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"

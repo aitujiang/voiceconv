@@ -45,10 +45,12 @@ def prepare_env() -> None:
     os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "logs" / "mplconfig"))
 
 
-def preflight() -> list[str]:
+def preflight(t2s: Path | None = None, vits: Path | None = None) -> list[str]:
     """检查模型文件是否齐全，返回缺失项列表（空 = 可以跑）。"""
+    t2s = Path(t2s) if t2s else T2S_CKPT
+    vits = Path(vits) if vits else VITS_PTH
     missing = []
-    for p in (ENGINE, T2S_CKPT, VITS_PTH):
+    for p in (ENGINE, t2s, vits):
         if not p.exists():
             missing.append(str(p))
     for d in (BERT_DIR, HUBERT_DIR):
@@ -61,11 +63,17 @@ class TTSEngine:
     """常驻合成器：模型只加载一次，之后反复合成。"""
 
     def __init__(self, device: str = "cuda", version: str = "v2",
-                 verbose: bool = True) -> None:
+                 verbose: bool = True,
+                 t2s: Path | str | None = None,
+                 vits: Path | str | None = None) -> None:
         prepare_env()
         self.device = device
         self.version = version
         self.verbose = verbose
+        # 自定义角色模型（.ckpt = GPT 阶段，.pth = SoVITS 阶段）；
+        # 不传就用 v2final 预训练底模。
+        self.t2s = Path(t2s) if t2s else T2S_CKPT
+        self.vits = Path(vits) if vits else VITS_PTH
         self._tts = None
         self._sample_rate = 32000
 
@@ -104,8 +112,8 @@ class TTSEngine:
                 "device": self.device,
                 "is_half": self.device != "cpu",
                 "version": self.version,
-                "t2s_weights_path": str(T2S_CKPT),
-                "vits_weights_path": str(VITS_PTH),
+                "t2s_weights_path": str(self.t2s),
+                "vits_weights_path": str(self.vits),
                 "bert_base_path": str(BERT_DIR),
                 "cnhuhbert_base_path": str(HUBERT_DIR),
             }

@@ -39,6 +39,8 @@ def main() -> int:
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--json", action="store_true", help="以 JSON 输出结果")
+    ap.add_argument("--t2s", default="", help="自定义 GPT 阶段权重（.ckpt），留空用底模")
+    ap.add_argument("--vits", default="", help="自定义 SoVITS 权重（.pth），留空用底模")
     args = ap.parse_args()
 
     # 路径一律先转绝对 —— 后面工作目录会被引擎改掉，相对路径就失效了
@@ -52,7 +54,8 @@ def main() -> int:
     try:
         from core import TTSEngine
 
-        engine = TTSEngine(device="cuda")
+        engine = TTSEngine(device="cuda",
+                           t2s=args.t2s or None, vits=args.vits or None)
         engine.synthesize(
             text=args.text,
             ref_audio=ref,
